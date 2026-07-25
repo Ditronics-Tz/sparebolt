@@ -426,6 +426,7 @@ export function AdminPage() {
   const pendingSellers = stats?.pendingSellers ?? 0;
   const pendingDrivers = stats?.pendingDrivers ?? 0;
   const openDisputes = stats?.openDisputes ?? 0;
+  const disputesPage = useFixedPagination(disputes);
 
   const badgeFor = (id: TabId) => {
     if (id === 'sellers' && pendingSellers) return pendingSellers;
@@ -809,7 +810,7 @@ export function AdminPage() {
                     Disputes ({disputes.length})
                   </h2>
                   <ul className="admin-stagger space-y-3">
-                    {disputes.map((d) => (
+                    {disputesPage.pageItems.map((d) => (
                       <li
                         key={d.id}
                         className="rounded-2xl border border-border bg-card p-4 shadow-sm"
@@ -875,6 +876,12 @@ export function AdminPage() {
                       <Empty title="No disputes" body="All clear for now." />
                     )}
                   </ul>
+                  <PaginationControls
+                    page={disputesPage.page}
+                    totalPages={disputesPage.totalPages}
+                    totalItems={disputes.length}
+                    onPage={disputesPage.setPage}
+                  />
                 </section>
               )}
 
@@ -1110,6 +1117,73 @@ function Overview({
   );
 }
 
+const PAGE_SIZE = 10;
+
+function useFixedPagination<T>(items: T[]) {
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage(1);
+  }, [items]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pageItems = useMemo(
+    () => items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [items, page],
+  );
+
+  return { page, setPage, totalPages, pageItems };
+}
+
+function PaginationControls({
+  page,
+  totalPages,
+  totalItems,
+  onPage,
+}: {
+  page: number;
+  totalPages: number;
+  totalItems: number;
+  onPage: (page: number) => void;
+}) {
+  if (totalItems <= PAGE_SIZE) return null;
+  const start = (page - 1) * PAGE_SIZE + 1;
+  const end = Math.min(page * PAGE_SIZE, totalItems);
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-xs font-semibold text-muted-foreground">
+        Showing {start}-{end} of {totalItems}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={page <= 1}
+          onClick={() => onPage(page - 1)}
+        >
+          Previous
+        </Button>
+        <span className="min-w-16 text-center text-xs font-bold text-muted-foreground">
+          {page} / {totalPages}
+        </span>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={page >= totalPages}
+          onClick={() => onPage(page + 1)}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Users and visit analytics ──────────────────────────────────────────────
 
 type UserRoleFilter = 'ALL' | AdminUserRow['role'];
@@ -1172,6 +1246,7 @@ function UsersPanel({
       return hay.includes(q);
     });
   }, [users, role, status, search]);
+  const usersPage = useFixedPagination(filtered);
 
   const roles: { id: UserRoleFilter; label: string }[] = [
     { id: 'ALL', label: 'All' },
@@ -1298,7 +1373,7 @@ function UsersPanel({
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filtered.map((row) => (
+              {usersPage.pageItems.map((row) => (
                 <tr key={row.id} className="hover:bg-muted/60">
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-3">
@@ -1354,10 +1429,16 @@ function UsersPanel({
             </p>
           </div>
         )}
+        <PaginationControls
+          page={usersPage.page}
+          totalPages={usersPage.totalPages}
+          totalItems={filtered.length}
+          onPage={usersPage.setPage}
+        />
       </div>
 
       <ul className="space-y-3 lg:hidden">
-        {filtered.map((row) => (
+        {usersPage.pageItems.map((row) => (
           <li
             key={row.id}
             className="rounded-2xl border border-border bg-card p-4 shadow-sm"
@@ -1397,6 +1478,14 @@ function UsersPanel({
         ))}
         {!filtered.length && <Empty title="No matching users" body=" " />}
       </ul>
+      <div className="lg:hidden">
+        <PaginationControls
+          page={usersPage.page}
+          totalPages={usersPage.totalPages}
+          totalItems={filtered.length}
+          onPage={usersPage.setPage}
+        />
+      </div>
     </section>
   );
 }
@@ -1443,6 +1532,8 @@ function VisitAnalyticsPanel({
     1,
     ...(data?.topPaths.map((row) => row.visits) ?? [1]),
   );
+  const recentVisits = data?.recentVisits ?? [];
+  const recentVisitsPage = useFixedPagination(recentVisits);
 
   return (
     <section className="space-y-5">
@@ -1595,7 +1686,7 @@ function VisitAnalyticsPanel({
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {data?.recentVisits.map((visit) => (
+              {recentVisitsPage.pageItems.map((visit) => (
                 <tr key={visit.id} className="hover:bg-muted/60">
                   <td className="px-4 py-3 font-mono text-xs">{visit.path}</td>
                   <td className="px-4 py-3">
@@ -1614,12 +1705,18 @@ function VisitAnalyticsPanel({
               ))}
             </tbody>
           </table>
-          {!data?.recentVisits.length && (
+          {!recentVisits.length && (
             <p className="py-10 text-center text-sm text-muted-foreground">
               No recent visits
             </p>
           )}
         </div>
+        <PaginationControls
+          page={recentVisitsPage.page}
+          totalPages={recentVisitsPage.totalPages}
+          totalItems={recentVisits.length}
+          onPage={recentVisitsPage.setPage}
+        />
       </div>
     </section>
   );
@@ -2098,6 +2195,7 @@ function SellersPanel({
 
   const { filter, setFilter, search, setSearch, counts, filtered } =
     useAppQueueFilter(sellers, matchSearch, 'PENDING');
+  const sellersPage = useFixedPagination(filtered);
 
   const agingPending = useMemo(
     () =>
@@ -2182,7 +2280,7 @@ function SellersPanel({
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filtered.map((s) => {
+              {sellersPage.pageItems.map((s) => {
                 const docs = sellerDocUrls(s);
                 const present = countDocs(docs);
                 const owner =
@@ -2284,11 +2382,17 @@ function SellersPanel({
             </p>
           </div>
         )}
+        <PaginationControls
+          page={sellersPage.page}
+          totalPages={sellersPage.totalPages}
+          totalItems={filtered.length}
+          onPage={sellersPage.setPage}
+        />
       </div>
 
       {/* Mobile */}
       <ul className="space-y-3 lg:hidden">
-        {filtered.map((s) => {
+        {sellersPage.pageItems.map((s) => {
           const docs = sellerDocUrls(s);
           const present = countDocs(docs);
           const owner =
@@ -2339,6 +2443,14 @@ function SellersPanel({
           />
         )}
       </ul>
+      <div className="lg:hidden">
+        <PaginationControls
+          page={sellersPage.page}
+          totalPages={sellersPage.totalPages}
+          totalItems={filtered.length}
+          onPage={sellersPage.setPage}
+        />
+      </div>
     </section>
   );
 }
@@ -2376,6 +2488,7 @@ function DriversPanel({
 
   const { filter, setFilter, search, setSearch, counts, filtered } =
     useAppQueueFilter(drivers, matchSearch, 'PENDING');
+  const driversPage = useFixedPagination(filtered);
 
   const agingPending = useMemo(
     () =>
@@ -2460,7 +2573,7 @@ function DriversPanel({
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filtered.map((d) => {
+              {driversPage.pageItems.map((d) => {
                 const docs = driverDocUrls(d);
                 const present = countDocs(docs);
                 const name =
@@ -2564,11 +2677,17 @@ function DriversPanel({
             </p>
           </div>
         )}
+        <PaginationControls
+          page={driversPage.page}
+          totalPages={driversPage.totalPages}
+          totalItems={filtered.length}
+          onPage={driversPage.setPage}
+        />
       </div>
 
       {/* Mobile */}
       <ul className="space-y-3 lg:hidden">
-        {filtered.map((d) => {
+        {driversPage.pageItems.map((d) => {
           const docs = driverDocUrls(d);
           const present = countDocs(docs);
           const name =
@@ -2620,6 +2739,14 @@ function DriversPanel({
           />
         )}
       </ul>
+      <div className="lg:hidden">
+        <PaginationControls
+          page={driversPage.page}
+          totalPages={driversPage.totalPages}
+          totalItems={filtered.length}
+          onPage={driversPage.setPage}
+        />
+      </div>
     </section>
   );
 }
@@ -3518,6 +3645,7 @@ function EscrowPanel({ escrows }: { escrows: EscrowRow[] }) {
       return hay.includes(q);
     });
   }, [escrows, filter, search]);
+  const escrowsPage = useFixedPagination(filtered);
 
   const filters: { id: EscrowFilter; label: string; count: number }[] = [
     { id: 'ALL', label: 'All', count: escrows.length },
@@ -3720,7 +3848,7 @@ function EscrowPanel({ escrows }: { escrows: EscrowRow[] }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filtered.map((e) => {
+              {escrowsPage.pageItems.map((e) => {
                 const days = escrowAgingDays(e.heldAt);
                 const customer = e.order.customer;
                 const itemCount = e.order.items?.length ?? 0;
@@ -3815,11 +3943,17 @@ function EscrowPanel({ escrows }: { escrows: EscrowRow[] }) {
             </p>
           </div>
         )}
+        <PaginationControls
+          page={escrowsPage.page}
+          totalPages={escrowsPage.totalPages}
+          totalItems={filtered.length}
+          onPage={escrowsPage.setPage}
+        />
       </div>
 
       {/* Mobile cards */}
       <ul className="space-y-3 lg:hidden">
-        {filtered.map((e) => {
+        {escrowsPage.pageItems.map((e) => {
           const days = escrowAgingDays(e.heldAt);
           const customer = e.order.customer;
           return (
@@ -3875,6 +4009,14 @@ function EscrowPanel({ escrows }: { escrows: EscrowRow[] }) {
           />
         )}
       </ul>
+      <div className="lg:hidden">
+        <PaginationControls
+          page={escrowsPage.page}
+          totalPages={escrowsPage.totalPages}
+          totalItems={filtered.length}
+          onPage={escrowsPage.setPage}
+        />
+      </div>
 
       {selected && (
         <EscrowDetailDrawer
