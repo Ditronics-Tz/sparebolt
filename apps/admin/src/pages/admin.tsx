@@ -1654,15 +1654,28 @@ function ReportsPanel({
 
   const printPdf = () => {
     if (!report) return;
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer');
-    if (!printWindow) {
-      toast.error('Allow pop-ups to print the report');
-      return;
-    }
-    printWindow.document.write(reportPrintMarkup(report));
-    printWindow.document.close();
-    printWindow.focus();
-    window.setTimeout(() => printWindow.print(), 250);
+    const frame = document.createElement('iframe');
+    frame.title = 'Printable SpareBolt report';
+    frame.style.position = 'fixed';
+    frame.style.right = '0';
+    frame.style.bottom = '0';
+    frame.style.width = '1px';
+    frame.style.height = '1px';
+    frame.style.border = '0';
+    frame.style.opacity = '0';
+    frame.onload = () => {
+      const printWindow = frame.contentWindow;
+      if (!printWindow) {
+        frame.remove();
+        toast.error('Unable to prepare the report for printing');
+        return;
+      }
+      printWindow.focus();
+      printWindow.addEventListener('afterprint', () => frame.remove(), { once: true });
+      window.setTimeout(() => printWindow.print(), 100);
+    };
+    frame.srcdoc = reportPrintMarkup(report);
+    document.body.appendChild(frame);
   };
 
   const periodOptions: { value: ReportPeriod; label: string }[] = [
