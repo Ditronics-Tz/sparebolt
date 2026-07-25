@@ -1914,6 +1914,17 @@ const CUSTOM_TYPE_LABELS: Record<CustomReportType, string> = {
   visits: 'Visits',
 };
 
+const CUSTOM_STATUS_OPTIONS: Record<CustomReportType, string[]> = {
+  orders: ['PENDING_PAYMENT', 'PAID_ESCROW', 'AWAITING_DRIVER', 'DRIVER_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'CONFIRMED', 'DISPUTED', 'REFUNDED', 'CANCELLED'],
+  payments: ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'REFUNDED'],
+  escrows: ['HELD', 'RELEASED_TO_SELLER', 'REFUNDED_TO_CUSTOMER', 'PARTIAL_REFUND'],
+  disputes: ['OPEN', 'UNDER_REVIEW', 'RESOLVED_CUSTOMER', 'RESOLVED_SELLER', 'CLOSED'],
+  deliveries: ['REQUESTED', 'ACCEPTED', 'REJECTED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'FAILED'],
+  visits: ['VISIT'],
+};
+
+const CUSTOM_METHOD_OPTIONS = ['mobile_money', 'card', 'bank'];
+
 function CustomReportBuilder() {
   const today = new Date().toISOString().slice(0, 10);
   const [types, setTypes] = useState<CustomReportType[]>(['orders']);
@@ -2114,8 +2125,8 @@ function CustomReportBuilder() {
           <label className="text-xs font-bold text-muted-foreground">Start date<input type="date" value={startDate} onChange={(event) => { setStartDate(event.target.value); setPage(1); }} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground" /></label>
           <label className="text-xs font-bold text-muted-foreground">End date<input type="date" value={endDate} onChange={(event) => { setEndDate(event.target.value); setPage(1); }} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground" /></label>
           <label className="text-xs font-bold text-muted-foreground">Search<input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search" className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground" /></label>
-          <label className="text-xs font-bold text-muted-foreground">Status<input value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} placeholder="Any status" className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground" /></label>
-          <label className="text-xs font-bold text-muted-foreground">Method<input value={method} onChange={(event) => { setMethod(event.target.value); setPage(1); }} placeholder="Any method" className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground" /></label>
+          <label className="text-xs font-bold text-muted-foreground">Status<select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground"><option value="">Any status</option>{CUSTOM_STATUS_OPTIONS[activeType].map((option) => <option key={option} value={option}>{option.replace(/_/g, ' ')}</option>)}</select></label>
+          <label className="text-xs font-bold text-muted-foreground">Method<select value={method} disabled={activeType !== 'payments'} onChange={(event) => { setMethod(event.target.value); setPage(1); }} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-50"><option value="">{activeType === 'payments' ? 'Any method' : 'Payments only'}</option>{activeType === 'payments' && CUSTOM_METHOD_OPTIONS.map((option) => <option key={option} value={option}>{option.replace(/_/g, ' ')}</option>)}</select></label>
         </div>
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
           <select defaultValue="" onChange={(event) => loadTemplate(event.target.value)} className="h-9 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground"><option value="">Load saved template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select>
@@ -2129,7 +2140,7 @@ function CustomReportBuilder() {
       </div>
 
       <div className="rounded-2xl border border-border bg-card shadow-sm">
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">{types.map((type) => <button key={type} type="button" onClick={() => { setActiveType(type); setPage(1); }} className={cn('rounded-lg px-3 py-2 text-xs font-bold cursor-pointer', activeType === type ? 'bg-bolt-600 text-white' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>{CUSTOM_TYPE_LABELS[type]} ({selected[type]?.length ?? 0})</button>)}</div>
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">{types.map((type) => <button key={type} type="button" onClick={() => { setActiveType(type); if (type !== 'payments') setMethod(''); setPage(1); }} className={cn('rounded-lg px-3 py-2 text-xs font-bold cursor-pointer', activeType === type ? 'bg-bolt-600 text-white' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>{CUSTOM_TYPE_LABELS[type]} ({selected[type]?.length ?? 0})</button>)}</div>
         <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b border-border bg-muted/70 text-[11px] font-bold uppercase tracking-wide text-muted-foreground"><tr><th className="w-12 px-4 py-3">Select</th><th className="px-4 py-3">Record</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Details</th><th className="px-4 py-3">Date</th></tr></thead><tbody className="divide-y divide-border">{records.map((row) => <tr key={row.id} className="hover:bg-muted/50"><td className="px-4 py-3"><input type="checkbox" checked={selectedForType.includes(row.id)} onChange={() => toggleRecord(row.id)} aria-label={`Select ${row.label}`} /></td><td className="px-4 py-3 font-semibold">{row.label}</td><td className="px-4 py-3">{row.status}</td><td className="px-4 py-3">{row.amount == null ? '—' : formatTZS(row.amount)}</td><td className="max-w-[20rem] truncate px-4 py-3 text-muted-foreground">{row.detail}</td><td className="px-4 py-3 text-xs text-muted-foreground">{formatRelative(row.date)}</td></tr>)}</tbody></table>{!loading && !records.length && <p className="py-10 text-center text-sm text-muted-foreground">No matching records</p>}</div>
         <PaginationControls page={page} totalPages={totalPages} totalItems={total} onPage={setPage} />
       </div>
