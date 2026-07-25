@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+/* Shared design tokens, base styles and admin-console motion. */
+@import "@sparebolt/shared/styles/theme.css";

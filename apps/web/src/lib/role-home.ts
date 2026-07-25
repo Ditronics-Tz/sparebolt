@@ -12,7 +12,9 @@ export function postAuthPath(
     return from;
   }
   if (!user) return '/';
-  if (user.role === 'ADMIN') return '/admin';
+  // Admins use the standalone admin app (apps/admin); in the customer app
+  // they simply land on the storefront home.
+  if (user.role === 'ADMIN') return '/';
   if (user.role === 'DRIVER') return '/driver';
   if (user.role === 'SELLER') return '/seller';
   return '/';

@@ -7,7 +7,6 @@ import {
   ChevronRight,
   HelpCircle,
   Languages,
-  LayoutDashboard,
   LogOut,
   Moon,
   Package,
@@ -302,15 +301,8 @@ export function AccountPage() {
     });
   }
 
-  if (user.role === 'ADMIN') {
-    earn.push({
-      key: 'admin',
-      label: 'Admin console',
-      icon: LayoutDashboard,
-      to: '/admin',
-      hint: 'Platform management',
-    });
-  }
+  // The admin console is a separate app (apps/admin) with its own login,
+  // so it is intentionally not linked from the customer account menu.
 
   const preferences: MenuRow[] = [
     {

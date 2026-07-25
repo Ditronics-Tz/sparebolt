@@ -23,7 +23,6 @@ import {
 } from '@/pages/seller';
 import { SellerPromosPage } from '@/pages/seller-promos';
 import { DriverPage } from '@/pages/driver';
-import { AdminPage } from '@/pages/admin';
 import { NotificationsPage } from '@/pages/notifications';
 
 function ThemedToaster() {
@@ -139,14 +138,6 @@ export default function App() {
             element={
               <ProtectedRoute roles={['DRIVER']}>
                 <DriverPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="admin"
-            element={
-              <ProtectedRoute roles={['ADMIN']}>
-                <AdminPage />
               </ProtectedRoute>
             }
           />

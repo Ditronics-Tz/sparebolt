@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   AlertTriangle,
@@ -31,7 +31,6 @@ import {
   Phone,
   Scale,
   Search,
-  Settings,
   Shield,
   Store,
   Sun,
@@ -42,14 +41,14 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { api } from '@/lib/api';
-import { cn, formatRelative, formatTZS } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { SafeImage } from '@/components/safe-image';
-import { useAuthStore } from '@/stores/auth-store';
-import { useTheme } from '@/hooks/use-theme';
+import { api } from '@sparebolt/shared/api';
+import { cn, formatRelative, formatTZS } from '@sparebolt/shared/utils';
+import { Button } from '@sparebolt/shared/ui/button';
+import { Badge } from '@sparebolt/shared/ui/badge';
+import { Input } from '@sparebolt/shared/ui/input';
+import { SafeImage } from '@sparebolt/shared/safe-image';
+import { useAuthStore } from '@sparebolt/shared/auth-store';
+import { useTheme } from '@sparebolt/shared/use-theme';
 
 type TabId = 'overview' | 'sellers' | 'drivers' | 'disputes' | 'escrows';
 
@@ -319,7 +318,7 @@ export function AdminPage() {
   const handleLogout = () => {
     logout();
     toast.success('Signed out');
-    void navigate('/auth/login');
+    void navigate("/login");
   };
 
   const pendingSellers = stats?.pendingSellers ?? 0;
@@ -2155,26 +2154,8 @@ function UserPopupMenu({
         className,
       )}
     >
-      <Link
-        to="/account"
-        role="menuitem"
-        className={itemCls}
-        onClick={onClose}
-      >
-        <User className="h-4 w-4 text-muted-foreground" />
-        Profile
-      </Link>
-      <Link
-        to="/account"
-        role="menuitem"
-        className={itemCls}
-        onClick={onClose}
-      >
-        <Settings className="h-4 w-4 text-muted-foreground" />
-        Settings
-      </Link>
-      <Link
-        to="/"
+      <a
+        href={import.meta.env.VITE_STORE_URL || '/'}
         target="_blank"
         rel="noopener noreferrer"
         role="menuitem"
@@ -2183,7 +2164,7 @@ function UserPopupMenu({
       >
         <ExternalLink className="h-4 w-4 text-muted-foreground" />
         Visit store
-      </Link>
+      </a>
       <div className="my-1 border-t border-border" />
       <button
         type="button"
