@@ -16,7 +16,7 @@ async function loadMakes(): Promise<Make[]> {
   if (cache) return cache;
   if (!inflight) {
     inflight = api
-      .get<Make[]>('/listings/vehicles/makes')
+      .get<Make[]>('/vehicles/makes')
       .then((r) => {
         cache = Array.isArray(r.data) ? r.data : [];
         return cache;
