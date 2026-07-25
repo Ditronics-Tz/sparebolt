@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ApprovalStatus, DisputeStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { buildAdminReport, reportCsv } from './reports';
 
 @Injectable()
 export class AdminService {
@@ -62,6 +63,15 @@ export class AdminService {
       },
       recentOrders,
     };
+  }
+
+  report(period?: string, anchor?: string) {
+    return buildAdminReport(this.prisma, period, anchor);
+  }
+
+  async reportCsv(period?: string, anchor?: string) {
+    const report = await this.report(period, anchor);
+    return reportCsv(report);
   }
 
   async listUsers(role?: string) {

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   Patch,
   Post,
@@ -29,6 +30,22 @@ export class AdminController {
   @Get('analytics/visits')
   visitAnalytics(@Query('range') range?: string) {
     return this.admin.visitAnalytics(range);
+  }
+
+  @Get('reports')
+  reports(@Query('period') period?: string, @Query('anchor') anchor?: string) {
+    return this.admin.report(period, anchor);
+  }
+
+  @Get('reports/export')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="sparebolt-report.csv"')
+  async exportReport(
+    @Query('format') _format: string | undefined,
+    @Query('period') period?: string,
+    @Query('anchor') anchor?: string,
+  ) {
+    return this.admin.reportCsv(period, anchor);
   }
 
   @Get('users')

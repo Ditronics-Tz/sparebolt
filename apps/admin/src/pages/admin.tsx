@@ -32,6 +32,7 @@ import {
   ChevronRight,
   ChevronUp,
   Clock,
+  Download,
   ExternalLink,
   Eye,
   FileCheck,
@@ -46,6 +47,7 @@ import {
   PanelLeftClose,
   Percent,
   Phone,
+  Printer,
   Scale,
   Search,
   Shield,
@@ -72,6 +74,7 @@ type TabId =
   | 'overview'
   | 'users'
   | 'analytics'
+  | 'reports'
   | 'sellers'
   | 'drivers'
   | 'disputes'
@@ -233,6 +236,29 @@ type VisitAnalytics = {
   }[];
 };
 
+type ReportPeriod = 'day' | 'week' | 'month' | 'quarter' | 'halfYear' | 'year';
+type ReportMetric = { value: number; previous: number; change: number | null };
+type AdminReport = {
+  period: {
+    type: ReportPeriod;
+    label: string;
+    start: string;
+    end: string;
+    previousStart: string;
+    previousEnd: string;
+  };
+  summary: Record<string, ReportMetric>;
+  snapshots: { users: number; sellers: number; drivers: number; activeListings: number };
+  sales: {
+    orderStatuses: { status: string; count: number }[];
+    paymentMethods: { method: string; count: number }[];
+    sellerSales: { seller: string; sales: number }[];
+  };
+  operations: { deliveries: number; delivered: number; failed: number; completionRate: number };
+  trust: { escrowHeld: number; escrowReleased: number; escrowRefunded: number; disputesOpened: number; disputesResolved: number };
+  series: { date: string; revenue: number; orders: number; users: number; visits: number }[];
+};
+
 function OverviewIcon({ className }: { className?: string }) {
   return (
     <HugeiconsIcon
@@ -267,6 +293,7 @@ const NAV: {
   { id: 'overview', label: 'Overview', icon: OverviewIcon },
   { id: 'users', label: 'Users', icon: Users },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+  { id: 'reports', label: 'Reports', icon: FileCheck },
   { id: 'sellers', label: 'Sellers', icon: SellersIcon },
   { id: 'drivers', label: 'Drivers', icon: Truck },
   { id: 'disputes', label: 'Disputes', icon: Scale },
@@ -344,6 +371,10 @@ export function AdminPage() {
   const [analytics, setAnalytics] = useState<VisitAnalytics | null>(null);
   const [analyticsRange, setAnalyticsRange] = useState<VisitRange>('30d');
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [report, setReport] = useState<AdminReport | null>(null);
+  const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('month');
+  const [reportAnchor, setReportAnchor] = useState(() => new Date().toISOString().slice(0, 10));
+  const [reportLoading, setReportLoading] = useState(false);
   const [sellers, setSellers] = useState<SellerRow[]>([]);
   const [drivers, setDrivers] = useState<DriverRow[]>([]);
   const [disputes, setDisputes] = useState<
@@ -413,6 +444,16 @@ export function AdminPage() {
   useEffect(() => {
     void loadAnalytics(analyticsRange);
   }, [analyticsRange]);
+
+  useEffect(() => {
+    if (tab !== 'reports') return;
+    setReportLoading(true);
+    void api
+      .get('/admin/reports', { params: { period: reportPeriod, anchor: reportAnchor } })
+      .then((res) => setReport(res.data))
+      .catch(() => toast.error('Failed to load report'))
+      .finally(() => setReportLoading(false));
+  }, [tab, reportPeriod, reportAnchor]);
 
   // Enable FCM web push for this admin (prompts once, then no-ops).
   useEffect(() => {
@@ -818,6 +859,17 @@ export function AdminPage() {
                   range={analyticsRange}
                   loading={analyticsLoading}
                   onRange={setAnalyticsRange}
+                />
+              )}
+
+              {tab === 'reports' && (
+                <ReportsPanel
+                  report={report}
+                  period={reportPeriod}
+                  anchor={reportAnchor}
+                  loading={reportLoading}
+                  onPeriod={setReportPeriod}
+                  onAnchor={setReportAnchor}
                 />
               )}
 
@@ -1524,6 +1576,234 @@ function UserProfileBadges({ row }: { row: AdminUserRow }) {
       )}
     </div>
   );
+}
+
+function reportNumber(value: number) {
+  return new Intl.NumberFormat('en-TZ').format(Math.round(value));
+}
+
+function reportChange(change: number | null) {
+  if (change == null) return 'No prior data';
+  return `${change >= 0 ? '+' : ''}${change.toFixed(1)}% vs previous`;
+}
+
+function ReportMetricCard({
+  label,
+  metric,
+  money = false,
+}: {
+  label: string;
+  metric?: ReportMetric;
+  money?: boolean;
+}) {
+  const value = metric?.value ?? 0;
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-2 font-display text-xl font-extrabold tabular-nums text-foreground">
+        {money ? formatTZS(value) : reportNumber(value)}
+      </p>
+      <p className={cn('mt-1 text-xs font-semibold', (metric?.change ?? 0) >= 0 ? 'text-success' : 'text-danger')}>
+        {reportChange(metric?.change ?? null)}
+      </p>
+    </div>
+  );
+}
+
+function reportPrintMarkup(report: AdminReport) {
+  const summaryRows = Object.entries(report.summary)
+    .map(([name, metric]) => `<tr><td>${name}</td><td>${metric.value}</td><td>${metric.previous}</td><td>${metric.change == null ? 'n/a' : `${metric.change.toFixed(1)}%`}</td></tr>`)
+    .join('');
+  const seriesRows = report.series
+    .map((row) => `<tr><td>${row.date}</td><td>${row.revenue}</td><td>${row.orders}</td><td>${row.users}</td><td>${row.visits}</td></tr>`)
+    .join('');
+  return `<!doctype html><html><head><title>SpareBolt report - ${report.period.label}</title><style>body{font-family:Arial,sans-serif;color:#172033;padding:32px}h1{margin-bottom:4px}p{color:#5d687b}table{border-collapse:collapse;width:100%;margin:20px 0}th,td{border:1px solid #d9dee8;padding:8px;text-align:left;font-size:12px}th{background:#f1f4f8;text-transform:uppercase;font-size:10px}</style></head><body><h1>SpareBolt admin report</h1><p>${report.period.label} · ${report.period.start.slice(0, 10)} to ${report.period.end.slice(0, 10)}</p><h2>Summary</h2><table><thead><tr><th>Metric</th><th>Value</th><th>Previous</th><th>Change</th></tr></thead><tbody>${summaryRows}</tbody></table><h2>Trend</h2><table><thead><tr><th>Date</th><th>Revenue</th><th>Orders</th><th>New users</th><th>Visits</th></tr></thead><tbody>${seriesRows}</tbody></table></body></html>`;
+}
+
+function ReportsPanel({
+  report,
+  period,
+  anchor,
+  loading,
+  onPeriod,
+  onAnchor,
+}: {
+  report: AdminReport | null;
+  period: ReportPeriod;
+  anchor: string;
+  loading: boolean;
+  onPeriod: (period: ReportPeriod) => void;
+  onAnchor: (anchor: string) => void;
+}) {
+  const downloadCsv = async () => {
+    try {
+      const response = await api.get('/admin/reports/export', {
+        params: { format: 'csv', period, anchor },
+        responseType: 'text',
+      });
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `sparebolt-report-${anchor}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Failed to export CSV');
+    }
+  };
+
+  const printPdf = () => {
+    if (!report) return;
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+    if (!printWindow) {
+      toast.error('Allow pop-ups to print the report');
+      return;
+    }
+    printWindow.document.write(reportPrintMarkup(report));
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => printWindow.print(), 250);
+  };
+
+  const periodOptions: { value: ReportPeriod; label: string }[] = [
+    { value: 'day', label: 'Daily' },
+    { value: 'week', label: 'Weekly' },
+    { value: 'month', label: 'Monthly' },
+    { value: 'quarter', label: 'Quarterly' },
+    { value: 'halfYear', label: 'Half-yearly' },
+    { value: 'year', label: 'Annual' },
+  ];
+  const metric = (key: string) => report?.summary[key];
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Business intelligence</p>
+          <h2 className="font-display text-xl font-extrabold text-foreground lg:text-2xl">Reports</h2>
+          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+            Compare marketplace performance across calendar periods. Financial values use completed payments.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <select
+            value={period}
+            onChange={(event) => onPeriod(event.target.value as ReportPeriod)}
+            className="h-10 rounded-lg border border-border bg-card px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-bolt-500/30"
+            aria-label="Report period"
+          >
+            {periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <input
+            type="date"
+            value={anchor}
+            onChange={(event) => onAnchor(event.target.value)}
+            className="h-10 rounded-lg border border-border bg-card px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-bolt-500/30"
+            aria-label="Report date"
+          />
+          <Button size="sm" variant="secondary" onClick={downloadCsv} disabled={!report || loading}>
+            <Download className="h-4 w-4" /> CSV
+          </Button>
+          <Button size="sm" variant="secondary" onClick={printPdf} disabled={!report || loading}>
+            <Printer className="h-4 w-4" /> PDF
+          </Button>
+        </div>
+      </div>
+
+      {loading && !report ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, index) => <div key={index} className="h-28 animate-pulse rounded-2xl bg-muted" />)}
+        </div>
+      ) : report ? (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <p className="font-bold text-foreground">{report.period.label}</p>
+            <p className="text-muted-foreground">Compared with the previous equivalent period</p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <ReportMetricCard label="Completed revenue" metric={metric('revenue')} money />
+            <ReportMetricCard label="Orders" metric={metric('orders')} />
+            <ReportMetricCard label="Average order" metric={metric('averageOrderValue')} money />
+            <ReportMetricCard label="Platform fees" metric={metric('platformFees')} money />
+            <ReportMetricCard label="Seller payouts" metric={metric('sellerPayouts')} money />
+            <ReportMetricCard label="Refunds" metric={metric('refunds')} money />
+            <ReportMetricCard label="Visits" metric={metric('visits')} />
+            <ReportMetricCard label="New users" metric={metric('newUsers')} />
+          </div>
+
+          <div className="rounded-2xl border border-border bg-card shadow-sm">
+            <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+              <h3 className="font-display font-bold">Performance trend</h3>
+              <p className="text-xs font-semibold text-muted-foreground">Revenue, orders, users, and visits</p>
+            </div>
+            <div className="h-80 p-3 sm:p-5">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={report.series} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
+                  <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+                  <XAxis dataKey="date" tick={{ fill: 'var(--color-muted-foreground)', fontSize: 11 }} minTickGap={24} />
+                  <YAxis yAxisId="count" tick={{ fill: 'var(--color-muted-foreground)', fontSize: 11 }} allowDecimals={false} />
+                  <YAxis yAxisId="money" orientation="right" tick={{ fill: 'var(--color-muted-foreground)', fontSize: 11 }} tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`} />
+                  <Tooltip contentStyle={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', color: 'var(--color-foreground)' }} />
+                  <Line yAxisId="money" type="monotone" dataKey="revenue" name="Revenue" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                  <Line yAxisId="count" type="monotone" dataKey="orders" name="Orders" stroke="#22c55e" strokeWidth={2} dot={false} />
+                  <Line yAxisId="count" type="monotone" dataKey="users" name="New users" stroke="#38bdf8" strokeWidth={2} dot={false} />
+                  <Line yAxisId="count" type="monotone" dataKey="visits" name="Visits" stroke="#a78bfa" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="grid gap-5 xl:grid-cols-3">
+            <ReportSection title="Marketplace snapshots">
+              <ReportRow label="Total users" value={reportNumber(report.snapshots.users)} />
+              <ReportRow label="Approved sellers" value={reportNumber(report.snapshots.sellers)} />
+              <ReportRow label="Approved drivers" value={reportNumber(report.snapshots.drivers)} />
+              <ReportRow label="Active listings" value={reportNumber(report.snapshots.activeListings)} />
+            </ReportSection>
+            <ReportSection title="Delivery operations">
+              <ReportRow label="Deliveries" value={reportNumber(report.operations.deliveries)} />
+              <ReportRow label="Delivered" value={reportNumber(report.operations.delivered)} />
+              <ReportRow label="Failed" value={reportNumber(report.operations.failed)} />
+              <ReportRow label="Completion rate" value={`${report.operations.completionRate.toFixed(1)}%`} />
+            </ReportSection>
+            <ReportSection title="Trust and escrow">
+              <ReportRow label="Funds held" value={formatTZS(report.trust.escrowHeld)} />
+              <ReportRow label="Released to sellers" value={formatTZS(report.trust.escrowReleased)} />
+              <ReportRow label="Refunded to buyers" value={formatTZS(report.trust.escrowRefunded)} />
+              <ReportRow label="Disputes opened / resolved" value={`${report.trust.disputesOpened} / ${report.trust.disputesResolved}`} />
+            </ReportSection>
+          </div>
+
+          <div className="grid gap-5 xl:grid-cols-2">
+            <ReportSection title="Orders by status">
+              {report.sales.orderStatuses.length ? report.sales.orderStatuses.map((row) => <ReportRow key={row.status} label={row.status.replace(/_/g, ' ')} value={reportNumber(row.count)} />) : <Empty title="No orders in this period" body="" />}
+            </ReportSection>
+            <ReportSection title="Completed payment methods">
+              {report.sales.paymentMethods.length ? report.sales.paymentMethods.map((row) => <ReportRow key={row.method} label={row.method.replace(/_/g, ' ')} value={reportNumber(row.count)} />) : <Empty title="No completed payments" body="" />}
+            </ReportSection>
+          </div>
+
+          <ReportSection title="Top sellers by completed sales">
+            {report.sales.sellerSales.length ? report.sales.sellerSales.map((row) => <ReportRow key={row.seller} label={row.seller} value={formatTZS(row.sales)} />) : <Empty title="No seller sales in this period" body="" />}
+          </ReportSection>
+        </>
+      ) : <Empty title="No report available" body="Choose a reporting period to load the report." />}
+    </section>
+  );
+}
+
+function ReportSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <h3 className="mb-3 font-display font-bold">{title}</h3>
+      <div className="divide-y divide-border">{children}</div>
+    </div>
+  );
+}
+
+function ReportRow({ label, value }: { label: string; value: string }) {
+  return <div className="flex items-center justify-between gap-3 py-2 text-sm"><span className="text-muted-foreground">{label}</span><strong className="text-right font-semibold text-foreground">{value}</strong></div>;
 }
 
 function VisitAnalyticsPanel({
