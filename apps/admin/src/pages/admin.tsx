@@ -1294,7 +1294,7 @@ function UsersPanel({
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-1">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Accounts
@@ -1302,17 +1302,6 @@ function UsersPanel({
           <h2 className="font-display text-xl font-extrabold text-foreground lg:text-2xl">
             System users
           </h2>
-        </div>
-        <div className="rounded-xl border border-border bg-card px-3 py-2 text-right shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-            Active users
-          </p>
-          <p className="font-display text-lg font-extrabold tabular-nums">
-            {activeCount}
-          </p>
-          <p className="text-[11px] text-muted-foreground">
-            {users.length - activeCount} inactive
-          </p>
         </div>
       </div>
 
@@ -2238,7 +2227,7 @@ function SellersPanel({
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-1">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             KYC · marketplace
@@ -2249,17 +2238,6 @@ function SellersPanel({
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
             Verify business identity, shop photos, and payout details before
             merchants can list parts.
-          </p>
-        </div>
-        <div className="rounded-xl border border-border bg-card px-3 py-2 text-right shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-            Total applications
-          </p>
-          <p className="font-display text-lg font-extrabold tabular-nums">
-            {sellers.length}
-          </p>
-          <p className="text-[11px] text-muted-foreground">
-            {counts.PENDING} awaiting review
           </p>
         </div>
       </div>
@@ -2531,7 +2509,7 @@ function DriversPanel({
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-1">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             KYC · logistics
@@ -2542,17 +2520,6 @@ function DriversPanel({
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
             Confirm identity, vehicle fitness, and licence before drivers can
             accept delivery jobs.
-          </p>
-        </div>
-        <div className="rounded-xl border border-border bg-card px-3 py-2 text-right shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-            Total applications
-          </p>
-          <p className="font-display text-lg font-extrabold tabular-nums">
-            {drivers.length}
-          </p>
-          <p className="text-[11px] text-muted-foreground">
-            {counts.PENDING} awaiting review
           </p>
         </div>
       </div>
@@ -3743,7 +3710,7 @@ function EscrowPanel({ escrows }: { escrows: EscrowRow[] }) {
   return (
     <section className="space-y-5">
       {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-1">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Trust & payments
@@ -3754,17 +3721,6 @@ function EscrowPanel({ escrows }: { escrows: EscrowRow[] }) {
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
             Buyer payments stay locked until delivery is confirmed. Release to
             sellers or refund buyers from dispute resolution.
-          </p>
-        </div>
-        <div className="rounded-xl border border-border bg-card px-3 py-2 text-right shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-            Ledger volume
-          </p>
-          <p className="font-display text-lg font-extrabold tabular-nums text-foreground">
-            {formatTZS(summary.volume)}
-          </p>
-          <p className="text-[11px] text-muted-foreground">
-            {escrows.length} record{escrows.length === 1 ? '' : 's'}
           </p>
         </div>
       </div>
