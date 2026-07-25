@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   AlertTriangle,
   ArrowDownLeft,
@@ -241,15 +242,18 @@ type VisitAnalytics = {
 
 type ReportPeriod = 'day' | 'week' | 'month' | 'quarter' | 'halfYear' | 'year';
 type CustomReportType = 'orders' | 'payments' | 'escrows' | 'disputes' | 'deliveries' | 'visits';
+type CustomReportFieldGroup = CustomReportType | 'customers' | 'sellers' | 'drivers';
+type CustomReportColumn = { key: string; label: string };
 type CustomReportConfig = {
   types: CustomReportType[];
   startDate: string;
   endDate: string;
   filters?: { search?: string; status?: string; method?: string };
   recordIds?: Partial<Record<CustomReportType, string[]>>;
+  fields?: Partial<Record<CustomReportFieldGroup, string[]>>;
 };
-type CustomRecord = { id: string; date: string; label: string; status: string; amount: number | null; detail: string; related?: { customer: string; sellers: string[]; driver: string | null } };
-type CustomReportPreview = { startDate: string; endDate: string; sections: { type: CustomReportType; total: number; amount: number; records: CustomRecord[] }[] };
+type CustomRecord = { id: string; date: string; label: string; status: string; amount: number | null; detail: string; cells: Record<string, string> };
+type CustomReportPreview = { startDate: string; endDate: string; sections: { type: CustomReportType; total: number; amount: number; columns: CustomReportColumn[]; records: CustomRecord[] }[] };
 type ReportMetric = { value: number; previous: number; change: number | null };
 type AdminReport = {
   period: {
@@ -1925,6 +1929,99 @@ const CUSTOM_STATUS_OPTIONS: Record<CustomReportType, string[]> = {
 
 const CUSTOM_METHOD_OPTIONS = ['mobile_money', 'card', 'bank'];
 
+const CUSTOM_FIELD_OPTIONS: Record<CustomReportFieldGroup, CustomReportColumn[]> = {
+  orders: [
+    { key: 'orderDate', label: 'Order date' },
+    { key: 'orderId', label: 'Order ID' },
+    { key: 'orderAmount', label: 'Amount' },
+    { key: 'orderStatus', label: 'Order status' },
+  ],
+  customers: [
+    { key: 'customerName', label: 'Customer name' },
+    { key: 'customerPhone', label: 'Customer phone' },
+    { key: 'customerEmail', label: 'Customer email' },
+  ],
+  sellers: [
+    { key: 'sellerName', label: 'Seller name' },
+    { key: 'sellerContactName', label: 'Seller contact name' },
+    { key: 'sellerPhone', label: 'Seller phone' },
+  ],
+  drivers: [
+    { key: 'driverName', label: 'Driver name' },
+    { key: 'driverPhone', label: 'Driver phone' },
+    { key: 'vehiclePlate', label: 'Vehicle plate' },
+    { key: 'vehicleType', label: 'Vehicle type' },
+  ],
+  deliveries: [
+    { key: 'deliveryDate', label: 'Delivery date' },
+    { key: 'deliveryOrderId', label: 'Order ID' },
+    { key: 'deliveryStatus', label: 'Delivery status' },
+    { key: 'pickupLocation', label: 'Pickup location' },
+    { key: 'dropoffLocation', label: 'Drop-off location' },
+    { key: 'deliveredDate', label: 'Delivered date' },
+  ],
+  payments: [
+    { key: 'date', label: 'Date' },
+    { key: 'record', label: 'Record' },
+    { key: 'status', label: 'Status' },
+    { key: 'amount', label: 'Amount' },
+    { key: 'method', label: 'Method' },
+  ],
+  escrows: [
+    { key: 'date', label: 'Date' },
+    { key: 'record', label: 'Record' },
+    { key: 'status', label: 'Status' },
+    { key: 'amount', label: 'Amount' },
+  ],
+  disputes: [
+    { key: 'date', label: 'Date' },
+    { key: 'record', label: 'Record' },
+    { key: 'status', label: 'Status' },
+    { key: 'reason', label: 'Reason' },
+  ],
+  visits: [
+    { key: 'date', label: 'Date' },
+    { key: 'path', label: 'Path' },
+    { key: 'location', label: 'Location' },
+  ],
+};
+
+const DEFAULT_CUSTOM_FIELDS: Partial<Record<CustomReportFieldGroup, string[]>> = {
+  orders: ['orderDate', 'orderId', 'orderAmount', 'orderStatus'],
+  customers: ['customerName', 'customerPhone'],
+  sellers: ['sellerName', 'sellerPhone'],
+  drivers: ['driverName', 'driverPhone', 'vehiclePlate'],
+  payments: CUSTOM_FIELD_OPTIONS.payments.map((field) => field.key),
+  escrows: CUSTOM_FIELD_OPTIONS.escrows.map((field) => field.key),
+  disputes: CUSTOM_FIELD_OPTIONS.disputes.map((field) => field.key),
+  deliveries: CUSTOM_FIELD_OPTIONS.deliveries.map((field) => field.key),
+  visits: CUSTOM_FIELD_OPTIONS.visits.map((field) => field.key),
+};
+
+const CUSTOM_FIELD_GROUP_LABELS: Record<CustomReportFieldGroup, string> = {
+  orders: 'Order details',
+  customers: 'Customer details',
+  sellers: 'Seller details',
+  drivers: 'Driver details',
+  deliveries: 'Delivery details',
+  payments: 'Payment details',
+  escrows: 'Escrow details',
+  disputes: 'Dispute details',
+  visits: 'Visit details',
+};
+
+function reportFieldsForType(type: CustomReportType, fields: Partial<Record<CustomReportFieldGroup, string[]>>): CustomReportColumn[] {
+  const groups: CustomReportFieldGroup[] = type === 'orders'
+    ? ['orders', 'customers', 'sellers', 'drivers', 'deliveries']
+    : [type];
+  return groups.flatMap((group) => CUSTOM_FIELD_OPTIONS[group].filter((field) => (fields[group] ?? []).includes(field.key)));
+}
+
+function customCellValue(row: CustomRecord, column: CustomReportColumn) {
+  const value = row.cells[column.key] ?? '';
+  return column.key === 'orderAmount' || column.key === 'amount' ? (value ? formatTZS(Number(value)) : '-') : value || '-';
+}
+
 function CustomReportBuilder() {
   const today = new Date().toISOString().slice(0, 10);
   const [types, setTypes] = useState<CustomReportType[]>(['orders']);
@@ -1938,6 +2035,7 @@ function CustomReportBuilder() {
   const [records, setRecords] = useState<CustomRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [selected, setSelected] = useState<Partial<Record<CustomReportType, string[]>>>({});
+  const [fields, setFields] = useState<Partial<Record<CustomReportFieldGroup, string[]>>>(DEFAULT_CUSTOM_FIELDS);
   const [preview, setPreview] = useState<CustomReportPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<{ id: string; name: string; config: CustomReportConfig }[]>([]);
@@ -1950,9 +2048,12 @@ function CustomReportBuilder() {
     endDate,
     filters: { search, status, method },
     recordIds: selected,
+    fields,
   };
   const selectedForType = selected[activeType] ?? [];
   const totalPages = Math.max(1, Math.ceil(total / 10));
+  const fieldGroups = Array.from(new Set(types.flatMap((type) => type === 'orders' ? ['orders', 'customers', 'sellers', 'drivers', 'deliveries'] : [type]))) as CustomReportFieldGroup[];
+  const activeColumns = reportFieldsForType(activeType, fields);
 
   const loadTemplates = async () => {
     try {
@@ -1998,6 +2099,7 @@ function CustomReportBuilder() {
     } else {
       setTypes([...types, type]);
       setActiveType(type);
+      if (!fields[type]) setFields({ ...fields, [type]: CUSTOM_FIELD_OPTIONS[type].map((field) => field.key) });
     }
     setPage(1);
   };
@@ -2012,7 +2114,18 @@ function CustomReportBuilder() {
     });
   };
 
+  const toggleField = (group: CustomReportFieldGroup, key: string) => {
+    const current = fields[group] ?? [];
+    const next = current.includes(key) ? current.filter((item) => item !== key) : [...current, key];
+    setFields({ ...fields, [group]: next });
+    setPreview(null);
+  };
+
   const previewReport = async () => {
+    if (!types.some((type) => reportFieldsForType(type, fields).length)) {
+      toast.error('Select at least one report column');
+      return;
+    }
     try {
       const response = await api.post('/admin/reports/custom/preview', config);
       setPreview(response.data);
@@ -2054,6 +2167,7 @@ function CustomReportBuilder() {
     setStatus(template.config.filters?.status ?? '');
     setMethod(template.config.filters?.method ?? '');
     setSelected(template.config.recordIds ?? {});
+    setFields(template.config.fields ?? DEFAULT_CUSTOM_FIELDS);
     setPage(1);
   };
 
@@ -2082,59 +2196,38 @@ function CustomReportBuilder() {
 
   const exportPdf = () => {
     if (!preview) return;
-    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 40;
-    let y = 44;
-    const ensureSpace = (height: number) => {
-      if (y + height > pageHeight - 40) {
-        pdf.addPage();
-        y = 44;
-      }
-    };
-    const addText = (value: string, x: number, width: number, size = 9, weight: 'normal' | 'bold' = 'normal') => {
-      pdf.setFont('helvetica', weight);
-      pdf.setFontSize(size);
-      const lines = pdf.splitTextToSize(value || '-', width) as string[];
-      ensureSpace(lines.length * (size + 4) + 4);
-      pdf.text(lines, x, y);
-      y += lines.length * (size + 4);
-    };
-    const addSectionHeading = (title: string) => {
-      ensureSpace(34);
-      pdf.setFillColor(240, 244, 248);
-      pdf.roundedRect(margin, y - 16, pageWidth - margin * 2, 26, 4, 4, 'F');
-      addText(title, margin + 10, pageWidth - margin * 2 - 20, 12, 'bold');
-      y += 8;
-    };
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
+    const margin = 32;
+    let y = 42;
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(18);
     pdf.text('SpareBolt custom report', margin, y);
-    y += 20;
-    addText(`${startDate} to ${endDate}`, margin, pageWidth - margin * 2, 10);
-    y += 8;
-    for (const section of preview.sections) {
-      addSectionHeading(`${CUSTOM_TYPE_LABELS[section.type]}  |  ${section.total} records  |  ${formatTZS(section.amount)}`);
-      ensureSpace(22);
-      for (const row of section.records) {
-        const date = row.date.slice(0, 10);
-        const amountValue = row.amount == null ? '-' : formatTZS(row.amount);
-        const columns = `${date}    ${row.label}    ${row.status}    ${amountValue}`;
-        addText(columns, margin, pageWidth - margin * 2, 9, 'bold');
-        if (row.related) {
-          addText(`Customer: ${row.related.customer}`, margin + 12, pageWidth - margin * 2 - 12, 9);
-          addText(`Seller(s): ${row.related.sellers.join(', ') || 'None listed'}`, margin + 12, pageWidth - margin * 2 - 12, 9);
-          addText(`Driver: ${row.related.driver || 'Not assigned'}`, margin + 12, pageWidth - margin * 2 - 12, 9);
-        } else {
-          addText(`Details: ${row.detail}`, margin + 12, pageWidth - margin * 2 - 12, 9);
-        }
-        ensureSpace(8);
-        pdf.setDrawColor(220, 226, 232);
-        pdf.line(margin, y, pageWidth - margin, y);
-        y += 10;
-      }
-    }
+    y += 18;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    pdf.text(`${startDate} to ${endDate}`, margin, y);
+    y += 18;
+    preview.sections.forEach((section) => {
+      if (!section.columns.length) return;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(12);
+      pdf.text(`${CUSTOM_TYPE_LABELS[section.type]} | ${section.total} records | ${formatTZS(section.amount)}`, margin, y);
+      y += 8;
+      autoTable(pdf, {
+        startY: y,
+        margin: { left: margin, right: margin },
+        head: [section.columns.map((column) => column.label)],
+        body: section.records.map((row) => section.columns.map((column) => customCellValue(row, column))),
+        theme: 'grid',
+        styles: { font: 'helvetica', fontSize: 7, cellPadding: 4, overflow: 'linebreak', valign: 'top' },
+        headStyles: { fillColor: [33, 63, 94], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        tableWidth: 'auto',
+        showHead: 'everyPage',
+      });
+      y = (pdf as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y;
+      y += 22;
+    });
     pdf.save(`sparebolt-custom-report-${startDate}.pdf`);
   };
 
@@ -2149,6 +2242,25 @@ function CustomReportBuilder() {
           {(Object.keys(CUSTOM_TYPE_LABELS) as CustomReportType[]).map((type) => (
             <button key={type} type="button" aria-pressed={types.includes(type)} onClick={() => toggleType(type)} className={cn('rounded-lg border px-3 py-2 text-xs font-bold cursor-pointer', types.includes(type) ? 'border-bolt-500 bg-bolt-500/10 text-bolt-700 dark:text-bolt-300' : 'border-border text-muted-foreground hover:text-foreground')}>{types.includes(type) ? 'Selected: ' : ''}{CUSTOM_TYPE_LABELS[type]}</button>
           ))}
+        </div>
+        <div className="border-t border-border pt-3">
+          <p className="text-sm font-bold text-foreground">Choose columns</p>
+          <p className="mt-1 text-xs text-muted-foreground">Select exactly which fields should become columns in the combined report.</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {fieldGroups.map((group) => (
+              <div key={group} className="rounded-lg border border-border bg-background p-3">
+                <p className="mb-2 text-xs font-bold text-foreground">{CUSTOM_FIELD_GROUP_LABELS[group]}</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {CUSTOM_FIELD_OPTIONS[group].map((field) => (
+                    <label key={field.key} className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <input type="checkbox" checked={(fields[group] ?? []).includes(field.key)} onChange={() => toggleField(group, field.key)} />
+                      <span>{field.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
         <div className="border-t border-border pt-3">
           <p className="text-sm font-bold text-foreground">2. Set date and filters</p>
@@ -2178,11 +2290,11 @@ function CustomReportBuilder() {
           <p className="mt-1 text-xs text-muted-foreground">Switch between selected sections, tick individual records, then preview the final report.</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">{types.map((type) => <button key={type} type="button" onClick={() => { setActiveType(type); if (type !== 'payments') setMethod(''); setPage(1); }} className={cn('rounded-lg px-3 py-2 text-xs font-bold cursor-pointer', activeType === type ? 'bg-bolt-600 text-white' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>{CUSTOM_TYPE_LABELS[type]} ({selected[type]?.length ?? 0} selected)</button>)}</div>
         </div>
-        <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b border-border bg-muted/70 text-[11px] font-bold uppercase tracking-wide text-muted-foreground"><tr><th className="w-12 px-4 py-3">Select</th><th className="px-4 py-3">Record</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Details</th><th className="px-4 py-3">Date</th></tr></thead><tbody className="divide-y divide-border">{records.map((row) => <tr key={row.id} className="hover:bg-muted/50"><td className="px-4 py-3"><input type="checkbox" checked={selectedForType.includes(row.id)} onChange={() => toggleRecord(row.id)} aria-label={`Select ${row.label}`} /></td><td className="px-4 py-3 font-semibold">{row.label}</td><td className="px-4 py-3">{row.status}</td><td className="px-4 py-3">{row.amount == null ? '—' : formatTZS(row.amount)}</td><td className="max-w-[20rem] truncate px-4 py-3 text-muted-foreground">{row.detail}</td><td className="px-4 py-3 text-xs text-muted-foreground">{formatRelative(row.date)}</td></tr>)}</tbody></table>{!loading && !records.length && <p className="py-10 text-center text-sm text-muted-foreground">No matching records</p>}</div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b border-border bg-muted/70 text-[11px] font-bold uppercase tracking-wide text-muted-foreground"><tr><th className="w-12 px-4 py-3">Select</th>{activeColumns.map((column) => <th key={column.key} className="px-4 py-3">{column.label}</th>)}</tr></thead><tbody className="divide-y divide-border">{records.map((row) => <tr key={row.id} className="hover:bg-muted/50"><td className="px-4 py-3"><input type="checkbox" checked={selectedForType.includes(row.id)} onChange={() => toggleRecord(row.id)} aria-label={`Select ${row.label}`} /></td>{activeColumns.map((column) => <td key={column.key} className="px-4 py-3">{customCellValue(row, column)}</td>)}</tr>)}</tbody></table>{!loading && !records.length && <p className="py-10 text-center text-sm text-muted-foreground">No matching records</p>}</div>
         <PaginationControls page={page} totalPages={totalPages} totalItems={total} onPage={setPage} />
       </div>
 
-      {preview && <div className="space-y-4"><div><h3 className="font-display text-lg font-bold">Report preview</h3><p className="mt-1 text-xs text-muted-foreground">This is the layout that will be used for PDF and CSV export.</p></div>{preview.sections.map((section) => <ReportSection key={section.type} title={`${CUSTOM_TYPE_LABELS[section.type]} · ${section.total} records`}><ReportRow label="Total amount" value={formatTZS(section.amount)} /><div className="mt-2 overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead className="border-b border-border text-[10px] font-bold uppercase text-muted-foreground"><tr><th className="px-2 py-2">Date</th><th className="px-2 py-2">Record</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Amount</th><th className="px-2 py-2">Details</th></tr></thead><tbody className="divide-y divide-border">{section.records.slice(0, 10).map((row) => <tr key={row.id} className="align-top"><td className="whitespace-nowrap px-2 py-2">{row.date.slice(0, 10)}</td><td className="px-2 py-2 font-semibold">{row.label}</td><td className="whitespace-nowrap px-2 py-2">{row.status}</td><td className="whitespace-nowrap px-2 py-2">{row.amount == null ? '-' : formatTZS(row.amount)}</td><td className="px-2 py-2 text-muted-foreground">{row.related ? <div className="space-y-1"><div><span className="font-semibold text-foreground">Customer:</span> {row.related.customer}</div><div><span className="font-semibold text-foreground">Seller(s):</span> {row.related.sellers.join(', ') || 'None listed'}</div><div><span className="font-semibold text-foreground">Driver:</span> {row.related.driver || 'Not assigned'}</div></div> : row.detail}</td></tr>)}</tbody></table></div></ReportSection>)}</div>}
+      {preview && <div className="space-y-4"><div><h3 className="font-display text-lg font-bold">Report preview</h3><p className="mt-1 text-xs text-muted-foreground">This table uses the exact columns selected above and will match the PDF and CSV exports.</p></div>{preview.sections.map((section) => <ReportSection key={section.type} title={`${CUSTOM_TYPE_LABELS[section.type]} · ${section.total} records`}><ReportRow label="Total amount" value={formatTZS(section.amount)} /><div className="mt-2 overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead className="border-b border-border text-[10px] font-bold uppercase text-muted-foreground"><tr>{section.columns.map((column) => <th key={column.key} className="px-2 py-2">{column.label}</th>)}</tr></thead><tbody className="divide-y divide-border">{section.records.slice(0, 10).map((row) => <tr key={row.id} className="align-top">{section.columns.map((column) => <td key={column.key} className="px-2 py-2">{customCellValue(row, column)}</td>)}</tr>)}</tbody></table></div></ReportSection>)}</div>}
     </div>
   );
 }
