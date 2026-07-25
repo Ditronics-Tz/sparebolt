@@ -1652,7 +1652,7 @@ function VisitTrendChart({
               margin={{ top: 8, right: 16, bottom: 0, left: -16 }}
             >
               <CartesianGrid
-                stroke="hsl(var(--border))"
+                stroke="var(--color-border)"
                 strokeDasharray="4 4"
                 vertical={false}
               />
@@ -1661,22 +1661,22 @@ function VisitTrendChart({
                 tickLine={false}
                 axisLine={false}
                 minTickGap={18}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                tick={{ fill: 'var(--color-muted-foreground)', fontSize: 11 }}
               />
               <YAxis
                 allowDecimals={false}
                 tickLine={false}
                 axisLine={false}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                tick={{ fill: 'var(--color-muted-foreground)', fontSize: 11 }}
               />
               <Tooltip
-                cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
+                cursor={{ stroke: 'var(--color-border)', strokeWidth: 1 }}
                 contentStyle={{
-                  border: '1px solid hsl(var(--border))',
+                  border: '1px solid var(--color-border)',
                   borderRadius: 12,
-                  background: 'hsl(var(--card))',
-                  color: 'hsl(var(--foreground))',
-                  boxShadow: '0 12px 32px hsl(var(--foreground) / 0.12)',
+                  background: 'var(--color-card)',
+                  color: 'var(--color-foreground)',
+                  boxShadow: '0 12px 32px rgb(15 23 42 / 0.18)',
                 }}
                 labelFormatter={(_, payload) =>
                   payload?.[0]?.payload?.date ?? ''
