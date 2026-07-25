@@ -245,16 +245,18 @@ type CustomReportType = 'orders' | 'payments' | 'escrows' | 'disputes' | 'delive
 type CustomReportFieldGroup = CustomReportType | 'customers' | 'sellers' | 'drivers';
 type CustomReportEntity = CustomReportFieldGroup;
 type CustomReportColumn = { key: string; label: string };
+type CustomReportHeader = { title: string; subtitle: string; organization: string; preparedBy: string };
 type CustomReportConfig = {
   entities: CustomReportEntity[];
   startDate: string;
   endDate: string;
   filters?: { entity?: CustomReportEntity; search?: string; status?: string; method?: string };
   fields?: Partial<Record<CustomReportFieldGroup, string[]>>;
+  header?: Partial<CustomReportHeader>;
   types?: CustomReportType[];
 };
 type CustomRecord = { id: string; date: string; label: string; status: string; amount: number | null; detail: string; cells: Record<string, string> };
-type CustomReportPreview = { startDate: string; endDate: string; entities: CustomReportEntity[]; total: number; amount: number; columns: CustomReportColumn[]; rows: CustomRecord[] };
+type CustomReportPreview = { startDate: string; endDate: string; entities: CustomReportEntity[]; header: CustomReportHeader; total: number; amount: number; columns: CustomReportColumn[]; rows: CustomRecord[] };
 type ReportMetric = { value: number; previous: number; change: number | null };
 type AdminReport = {
   period: {
@@ -1999,6 +2001,13 @@ const DEFAULT_CUSTOM_FIELDS: Partial<Record<CustomReportFieldGroup, string[]>> =
   visits: CUSTOM_FIELD_OPTIONS.visits.map((field) => field.key),
 };
 
+const DEFAULT_CUSTOM_HEADER: CustomReportHeader = {
+  title: 'SpareBolt custom report',
+  subtitle: '',
+  organization: '',
+  preparedBy: '',
+};
+
 const CUSTOM_FIELD_GROUP_LABELS: Record<CustomReportFieldGroup, string> = {
   orders: 'Order details',
   customers: 'Customer details',
@@ -2039,6 +2048,7 @@ function CustomReportBuilder() {
   const [status, setStatus] = useState('');
   const [method, setMethod] = useState('');
   const [fields, setFields] = useState<Partial<Record<CustomReportFieldGroup, string[]>>>(DEFAULT_CUSTOM_FIELDS);
+  const [header, setHeader] = useState<CustomReportHeader>(DEFAULT_CUSTOM_HEADER);
   const [preview, setPreview] = useState<CustomReportPreview | null>(null);
   const [previewPage, setPreviewPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -2047,7 +2057,7 @@ function CustomReportBuilder() {
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
 
   const columns = reportColumnsForEntities(entities, fields);
-  const config: CustomReportConfig = { entities, startDate, endDate, filters: { entity: filterEntity, search, status, method }, fields };
+  const config: CustomReportConfig = { entities, startDate, endDate, filters: { entity: filterEntity, search, status, method }, fields, header };
   const totalPages = Math.max(1, Math.ceil((preview?.total ?? 0) / 10));
   const visibleRows = preview?.rows.slice((previewPage - 1) * 10, previewPage * 10) ?? [];
 
@@ -2079,6 +2089,11 @@ function CustomReportBuilder() {
   const toggleField = (entity: CustomReportEntity, key: string) => {
     const current = fields[entity] ?? [];
     setFields({ ...fields, [entity]: current.includes(key) ? current.filter((item) => item !== key) : [...current, key] });
+    setPreview(null);
+  };
+
+  const updateHeader = (key: keyof CustomReportHeader, value: string) => {
+    setHeader({ ...header, [key]: value });
     setPreview(null);
   };
 
@@ -2130,6 +2145,7 @@ function CustomReportBuilder() {
     setStatus(template.config.filters?.status ?? '');
     setMethod(template.config.filters?.method ?? '');
     setFields(template.config.fields ?? DEFAULT_CUSTOM_FIELDS);
+    setHeader({ ...DEFAULT_CUSTOM_HEADER, ...(template.config.header ?? {}) });
     setPreview(null);
   };
 
@@ -2162,12 +2178,21 @@ function CustomReportBuilder() {
     const margin = 32;
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(18);
-    pdf.text('SpareBolt custom report', margin, 42);
+    pdf.text(preview.header.title, margin, 42);
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(10);
-    pdf.text(`${startDate} to ${endDate}`, margin, 60);
+    let headerY = 60;
+    if (preview.header.subtitle) {
+      pdf.text(preview.header.subtitle, margin, headerY);
+      headerY += 14;
+    }
+    if (preview.header.organization) {
+      pdf.text(preview.header.organization, margin, headerY);
+      headerY += 14;
+    }
+    pdf.text(`${startDate} to ${endDate}${preview.header.preparedBy ? ` | Prepared by: ${preview.header.preparedBy}` : ''}`, margin, headerY);
     autoTable(pdf, {
-      startY: 76,
+      startY: headerY + 16,
       margin: { left: margin, right: margin },
       head: [preview.columns.map((column) => column.label)],
       body: preview.rows.map((row) => preview.columns.map((column) => customCellValue(row, column))),
@@ -2183,6 +2208,16 @@ function CustomReportBuilder() {
   return (
     <div className="space-y-5">
       <div className="grid gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <div>
+          <p className="text-sm font-bold text-foreground">Customize report header</p>
+          <p className="mt-1 text-xs text-muted-foreground">These values appear in the preview, PDF, CSV, and saved template.</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="text-xs font-bold text-muted-foreground">Report title<input value={header.title} onChange={(event) => updateHeader('title', event.target.value)} placeholder="SpareBolt custom report" className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground" /></label>
+            <label className="text-xs font-bold text-muted-foreground">Subtitle<input value={header.subtitle} onChange={(event) => updateHeader('subtitle', event.target.value)} placeholder="Undelivered orders report" className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground" /></label>
+            <label className="text-xs font-bold text-muted-foreground">Organization<input value={header.organization} onChange={(event) => updateHeader('organization', event.target.value)} placeholder="Company name" className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground" /></label>
+            <label className="text-xs font-bold text-muted-foreground">Prepared by<input value={header.preparedBy} onChange={(event) => updateHeader('preparedBy', event.target.value)} placeholder="Administrator name" className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground" /></label>
+          </div>
+        </div>
         <div><p className="text-sm font-bold text-foreground">1. Select entities to combine</p><p className="mt-1 text-xs text-muted-foreground">Choose the related data sources that should become one report.</p></div>
         <div className="flex flex-wrap gap-2">{entityOptions.map((entity) => <button key={entity} type="button" aria-pressed={entities.includes(entity)} onClick={() => toggleEntity(entity)} className={cn('rounded-lg border px-3 py-2 text-xs font-bold cursor-pointer', entities.includes(entity) ? 'border-bolt-500 bg-bolt-500/10 text-bolt-700 dark:text-bolt-300' : 'border-border text-muted-foreground hover:text-foreground')}>{entities.includes(entity) ? 'Selected: ' : ''}{entityLabels[entity]}</button>)}</div>
         {entities.includes('visits') && entities.length > 1 && <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">Visits cannot be combined with order-related entities. Select Visits alone.</p>}
@@ -2199,7 +2234,7 @@ function CustomReportBuilder() {
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3"><select defaultValue="" onChange={(event) => loadTemplate(event.target.value)} className="h-9 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground"><option value="">Load saved template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select><input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="Template name" className="h-9 rounded-lg border border-border bg-background px-3 text-xs text-foreground" /><Button size="sm" variant="secondary" onClick={saveTemplate}><Save className="h-4 w-4" /> {editingTemplateId ? 'Update' : 'Save'}</Button><Button size="sm" onClick={previewReport} disabled={loading}>{loading ? 'Building...' : 'Generate report'}</Button><Button size="sm" variant="secondary" onClick={exportCsv} disabled={!preview}><Download className="h-4 w-4" /> CSV</Button><Button size="sm" variant="secondary" onClick={exportPdf} disabled={!preview}><Printer className="h-4 w-4" /> PDF</Button></div>
         {templates.length > 0 && <div className="flex flex-wrap gap-2 text-xs text-muted-foreground"><span>Saved:</span>{templates.map((template) => <span key={template.id} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1">{template.name}<button type="button" onClick={() => deleteTemplate(template.id)} aria-label={`Delete ${template.name}`} title="Delete template" className="cursor-pointer text-muted-foreground hover:text-danger"><Trash2 className="h-3 w-3" /></button></span>)}</div>}
       </div>
-      {preview && <div className="rounded-2xl border border-border bg-card p-4 shadow-sm"><div className="mb-3 flex flex-wrap items-end justify-between gap-2"><div><h3 className="font-display text-lg font-bold">Combined report</h3><p className="mt-1 text-xs text-muted-foreground">{preview.total} matching rows from {entities.map((entity) => entityLabels[entity]).join(', ')}.</p></div><p className="text-sm font-bold">Total: {formatTZS(preview.amount)}</p></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-xs"><thead className="border-b border-border bg-muted/70 text-[10px] font-bold uppercase text-muted-foreground"><tr>{preview.columns.map((column) => <th key={column.key} className="whitespace-nowrap px-2 py-2">{column.label}</th>)}</tr></thead><tbody className="divide-y divide-border">{visibleRows.map((row) => <tr key={row.id} className="align-top hover:bg-muted/50">{preview.columns.map((column) => <td key={column.key} className="whitespace-nowrap px-2 py-2">{customCellValue(row, column)}</td>)}</tr>)}</tbody></table>{!visibleRows.length && <p className="py-10 text-center text-sm text-muted-foreground">No matching records</p>}</div><PaginationControls page={previewPage} totalPages={totalPages} totalItems={preview.total} onPage={setPreviewPage} /></div>}
+      {preview && <div className="rounded-2xl border border-border bg-card p-4 shadow-sm"><div className="mb-3 flex flex-wrap items-end justify-between gap-2"><div><h3 className="font-display text-lg font-bold">{preview.header.title}</h3>{preview.header.subtitle && <p className="mt-1 text-sm text-muted-foreground">{preview.header.subtitle}</p>}<p className="mt-1 text-xs text-muted-foreground">{preview.total} matching rows from {entities.map((entity) => entityLabels[entity]).join(', ')}.</p></div><p className="text-sm font-bold">Total: {formatTZS(preview.amount)}</p></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-xs"><thead className="border-b border-border bg-muted/70 text-[10px] font-bold uppercase text-muted-foreground"><tr>{preview.columns.map((column) => <th key={column.key} className="whitespace-nowrap px-2 py-2">{column.label}</th>)}</tr></thead><tbody className="divide-y divide-border">{visibleRows.map((row) => <tr key={row.id} className="align-top hover:bg-muted/50">{preview.columns.map((column) => <td key={column.key} className="whitespace-nowrap px-2 py-2">{customCellValue(row, column)}</td>)}</tr>)}</tbody></table>{!visibleRows.length && <p className="py-10 text-center text-sm text-muted-foreground">No matching records</p>}</div><PaginationControls page={previewPage} totalPages={totalPages} totalItems={preview.total} onPage={setPreviewPage} /></div>}
     </div>
   );
 }

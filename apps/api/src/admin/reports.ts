@@ -407,6 +407,12 @@ export type CustomReportFieldGroup = CustomReportType | 'customers' | 'sellers' 
 export type CustomReportEntity = CustomReportFieldGroup;
 
 export type CustomReportFields = Partial<Record<CustomReportFieldGroup, string[]>>;
+export type CustomReportHeader = {
+  title?: string;
+  subtitle?: string;
+  organization?: string;
+  preparedBy?: string;
+};
 
 export type CustomReportConfig = {
   entities?: CustomReportEntity[];
@@ -414,6 +420,7 @@ export type CustomReportConfig = {
   endDate: string;
   filters?: { entity?: CustomReportEntity; search?: string; status?: string; method?: string };
   fields?: CustomReportFields;
+  header?: CustomReportHeader;
   types?: CustomReportType[];
 };
 
@@ -510,6 +517,15 @@ function customColumns(entities: CustomReportEntity[], fields?: CustomReportFiel
     const keys = selected[group] ?? (fields ? [] : DEFAULT_CUSTOM_FIELDS[group] ?? CUSTOM_REPORT_FIELD_OPTIONS[group].map((field) => field.key));
     return CUSTOM_REPORT_FIELD_OPTIONS[group].filter((field) => keys.includes(field.key));
   });
+}
+
+function customHeader(header?: CustomReportHeader): Required<CustomReportHeader> {
+  return {
+    title: header?.title?.trim() || 'SpareBolt custom report',
+    subtitle: header?.subtitle?.trim() || '',
+    organization: header?.organization?.trim() || '',
+    preparedBy: header?.preparedBy?.trim() || '',
+  };
 }
 
 function customCells(base: { date: string; label: string; status: string; amount: number | null; detail: string }) {
@@ -747,7 +763,7 @@ export async function buildCustomReport(prisma: PrismaService, config: CustomRep
         visitLocation: [row.city, row.region, row.country].filter(Boolean).join(', ') || 'Unknown location',
       } as Record<string, string>,
     })).filter((row) => customMatch(row, { ...config, entities }));
-    return { startDate: config.startDate, endDate: config.endDate, entities, columns, total: rows.length, amount: 0, rows };
+    return { startDate: config.startDate, endDate: config.endDate, entities, header: customHeader(config.header), columns, total: rows.length, amount: 0, rows };
   }
 
   const rows = await prisma.order.findMany({
@@ -859,6 +875,7 @@ export async function buildCustomReport(prisma: PrismaService, config: CustomRep
     startDate: config.startDate,
     endDate: config.endDate,
     entities,
+    header: customHeader(config.header),
     columns,
     total: reportRows.length,
     amount: [...uniqueOrderAmounts.values()].reduce((sum, value) => sum + value, 0),
@@ -867,7 +884,11 @@ export async function buildCustomReport(prisma: PrismaService, config: CustomRep
 }
 
 export function customReportCsv(report: Awaited<ReturnType<typeof buildCustomReport>>) {
-  const rows: string[][] = [['SpareBolt custom report'], ['Start date', report.startDate], ['End date', report.endDate], []];
+  const rows: string[][] = [[report.header.title]];
+  if (report.header.subtitle) rows.push(['Subtitle', report.header.subtitle]);
+  if (report.header.organization) rows.push(['Organization', report.header.organization]);
+  if (report.header.preparedBy) rows.push(['Prepared by', report.header.preparedBy]);
+  rows.push(['Start date', report.startDate], ['End date', report.endDate], []);
   rows.push(report.columns.map((column) => column.label));
   for (const row of report.rows) rows.push(report.columns.map((column) => row.cells[column.key] ?? ''));
   return rows.map((row) => row.map(csvCell).join(',')).join('\n');
