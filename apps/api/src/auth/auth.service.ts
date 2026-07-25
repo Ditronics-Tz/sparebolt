@@ -189,7 +189,11 @@ export class AuthService {
     const existing = await this.prisma.sellerProfile.findUnique({
       where: { userId },
     });
-    if (existing) throw new ConflictException('Already a seller');
+    // Only a previously REJECTED applicant may resubmit; an approved, pending,
+    // or suspended profile cannot re-register.
+    if (existing && existing.status !== 'REJECTED') {
+      throw new ConflictException('Already a seller');
+    }
 
     if (
       !dto.termsAccepted ||
@@ -225,69 +229,82 @@ export class AuthService {
     }
 
     const now = new Date();
-    const [profile] = await this.prisma.$transaction([
-      this.prisma.sellerProfile.create({
-        data: {
-          userId,
-          businessName: dto.businessName,
-          businessType: dto.businessType,
-          description: dto.description,
-          registrationNumber: dto.registrationNumber,
-          tinNumber: dto.tinNumber,
-          yearsTrading: dto.yearsTrading,
-          legalFullName: dto.legalFullName,
-          nationalId: dto.nationalId,
-          nationalIdFrontUrl: dto.nationalIdFrontUrl,
-          nationalIdBackUrl: dto.nationalIdBackUrl,
-          selfieUrl: dto.selfieUrl,
-          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
-          secondaryPhone: dto.secondaryPhone,
-          addressStreet: dto.addressStreet,
-          addressArea: dto.addressArea,
-          addressWard: dto.addressWard,
-          city: dto.city,
-          region: dto.region,
-          addressLandmark: dto.addressLandmark,
-          latitude: dto.latitude,
-          longitude: dto.longitude,
-          shopExteriorUrl: dto.shopExteriorUrl,
-          shopInteriorUrl: dto.shopInteriorUrl,
-          payoutMethod: dto.payoutMethod,
-          payoutPhone: dto.payoutPhone,
-          payoutAccountName: dto.payoutAccountName,
-          bankName: dto.bankName,
-          bankAccountNumber: dto.bankAccountNumber,
-          licenseNumber: dto.licenseNumber,
-          termsAcceptedAt: now,
-          dataConsentAt: now,
-          accurateListingAt: now,
-          status: 'PENDING',
-        },
-      }),
-      this.prisma.user.update({
-        where: { id: userId },
-        data: { role: Role.SELLER },
-      }),
-    ]);
+    const isResubmission = Boolean(existing);
+    const data = {
+      businessName: dto.businessName,
+      businessType: dto.businessType,
+      description: dto.description,
+      registrationNumber: dto.registrationNumber,
+      tinNumber: dto.tinNumber,
+      yearsTrading: dto.yearsTrading,
+      legalFullName: dto.legalFullName,
+      nationalId: dto.nationalId,
+      nationalIdFrontUrl: dto.nationalIdFrontUrl,
+      nationalIdBackUrl: dto.nationalIdBackUrl,
+      selfieUrl: dto.selfieUrl,
+      dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+      secondaryPhone: dto.secondaryPhone,
+      addressStreet: dto.addressStreet,
+      addressArea: dto.addressArea,
+      addressWard: dto.addressWard,
+      city: dto.city,
+      region: dto.region,
+      addressLandmark: dto.addressLandmark,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+      shopExteriorUrl: dto.shopExteriorUrl,
+      shopInteriorUrl: dto.shopInteriorUrl,
+      payoutMethod: dto.payoutMethod,
+      payoutPhone: dto.payoutPhone,
+      payoutAccountName: dto.payoutAccountName,
+      bankName: dto.bankName,
+      bankAccountNumber: dto.bankAccountNumber,
+      licenseNumber: dto.licenseNumber,
+      termsAcceptedAt: now,
+      dataConsentAt: now,
+      accurateListingAt: now,
+      status: 'PENDING' as const,
+      // Clear any prior rejection so the row re-enters the review queue clean.
+      rejectionReason: null,
+    };
+
+    const profile = existing
+      ? await this.prisma.sellerProfile.update({ where: { userId }, data })
+      : (
+          await this.prisma.$transaction([
+            this.prisma.sellerProfile.create({ data: { userId, ...data } }),
+            this.prisma.user.update({
+              where: { id: userId },
+              data: { role: Role.SELLER },
+            }),
+          ])
+        )[0];
 
     await this.notifications.notify(userId, {
       type: 'APPROVAL',
-      title: 'Seller application received',
+      title: isResubmission
+        ? 'Seller application resubmitted'
+        : 'Seller application received',
       body: 'Your documents are under review. You can list parts after approval.',
     });
 
     // Alert admins so the KYC queue is actioned promptly (in-app + push).
     void this.notifications.notifyAdmins({
       type: 'APPROVAL',
-      title: 'New seller application',
-      body: `${dto.businessName} submitted seller KYC and is awaiting review.`,
+      title: isResubmission
+        ? 'Seller application resubmitted'
+        : 'New seller application',
+      body: `${dto.businessName} ${
+        isResubmission ? 'resubmitted' : 'submitted'
+      } seller KYC and is awaiting review.`,
       data: { kind: 'seller_application', sellerId: profile.id },
     });
 
     return {
       ...profile,
-      message:
-        'Application submitted. Admin will verify your identity and shop before you can sell.',
+      message: isResubmission
+        ? 'Application resubmitted. Admin will review your updated details.'
+        : 'Application submitted. Admin will verify your identity and shop before you can sell.',
     };
   }
 
@@ -295,7 +312,11 @@ export class AuthService {
     const existing = await this.prisma.driverProfile.findUnique({
       where: { userId },
     });
-    if (existing) throw new ConflictException('Already a driver');
+    // Only a previously REJECTED applicant may resubmit; an approved, pending,
+    // or suspended profile cannot re-register.
+    if (existing && existing.status !== 'REJECTED') {
+      throw new ConflictException('Already a driver');
+    }
 
     if (!dto.termsAccepted || !dto.dataConsent || !dto.trackingConsent) {
       throw new BadRequestException(
@@ -318,83 +339,96 @@ export class AuthService {
     }
 
     const now = new Date();
-    const [profile] = await this.prisma.$transaction([
-      this.prisma.driverProfile.create({
-        data: {
-          userId,
-          legalFullName: dto.legalFullName,
-          nationalId: dto.nationalId,
-          nationalIdFrontUrl: dto.nationalIdFrontUrl,
-          nationalIdBackUrl: dto.nationalIdBackUrl,
-          selfieUrl: dto.selfieUrl,
-          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
-          secondaryPhone: dto.secondaryPhone,
-          addressStreet: dto.addressStreet,
-          addressArea: dto.addressArea,
-          addressWard: dto.addressWard,
-          city: dto.city,
-          addressLandmark: dto.addressLandmark,
-          homeLatitude: dto.homeLatitude,
-          homeLongitude: dto.homeLongitude,
-          vehicleType: dto.vehicleType,
-          vehiclePlate: dto.vehiclePlate.toUpperCase().trim(),
-          vehicleMake: dto.vehicleMake,
-          vehicleModel: dto.vehicleModel,
-          vehicleColor: dto.vehicleColor,
-          vehicleYear: dto.vehicleYear,
-          vehiclePhotoSideUrl: dto.vehiclePhotoSideUrl,
-          vehiclePhotoRearUrl: dto.vehiclePhotoRearUrl,
-          vehiclePhotoWithDriverUrl: dto.vehiclePhotoWithDriverUrl,
-          licenseNumber: dto.licenseNumber,
-          licenseClass: dto.licenseClass,
-          licensePhotoUrl: dto.licensePhotoUrl,
-          insuranceDocUrl: dto.insuranceDocUrl,
-          insuranceExpiresAt: dto.insuranceExpiresAt
-            ? new Date(dto.insuranceExpiresAt)
-            : null,
-          payoutMethod: dto.payoutMethod,
-          payoutPhone: dto.payoutPhone,
-          payoutAccountName: dto.payoutAccountName,
-          bankName: dto.bankName,
-          bankAccountNumber: dto.bankAccountNumber,
-          emergencyName: dto.emergencyName,
-          emergencyPhone: dto.emergencyPhone,
-          emergencyRelation: dto.emergencyRelation,
-          guarantorName: dto.guarantorName,
-          guarantorPhone: dto.guarantorPhone,
-          guarantorIdNumber: dto.guarantorIdNumber,
-          guarantorAddress: dto.guarantorAddress,
-          termsAcceptedAt: now,
-          dataConsentAt: now,
-          trackingConsentAt: now,
-          // Pending admin document verification before jobs
-          status: 'PENDING',
-        },
-      }),
-      this.prisma.user.update({
-        where: { id: userId },
-        data: { role: Role.DRIVER },
-      }),
-    ]);
+    const isResubmission = Boolean(existing);
+    const data = {
+      legalFullName: dto.legalFullName,
+      nationalId: dto.nationalId,
+      nationalIdFrontUrl: dto.nationalIdFrontUrl,
+      nationalIdBackUrl: dto.nationalIdBackUrl,
+      selfieUrl: dto.selfieUrl,
+      dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+      secondaryPhone: dto.secondaryPhone,
+      addressStreet: dto.addressStreet,
+      addressArea: dto.addressArea,
+      addressWard: dto.addressWard,
+      city: dto.city,
+      addressLandmark: dto.addressLandmark,
+      homeLatitude: dto.homeLatitude,
+      homeLongitude: dto.homeLongitude,
+      vehicleType: dto.vehicleType,
+      vehiclePlate: dto.vehiclePlate.toUpperCase().trim(),
+      vehicleMake: dto.vehicleMake,
+      vehicleModel: dto.vehicleModel,
+      vehicleColor: dto.vehicleColor,
+      vehicleYear: dto.vehicleYear,
+      vehiclePhotoSideUrl: dto.vehiclePhotoSideUrl,
+      vehiclePhotoRearUrl: dto.vehiclePhotoRearUrl,
+      vehiclePhotoWithDriverUrl: dto.vehiclePhotoWithDriverUrl,
+      licenseNumber: dto.licenseNumber,
+      licenseClass: dto.licenseClass,
+      licensePhotoUrl: dto.licensePhotoUrl,
+      insuranceDocUrl: dto.insuranceDocUrl,
+      insuranceExpiresAt: dto.insuranceExpiresAt
+        ? new Date(dto.insuranceExpiresAt)
+        : null,
+      payoutMethod: dto.payoutMethod,
+      payoutPhone: dto.payoutPhone,
+      payoutAccountName: dto.payoutAccountName,
+      bankName: dto.bankName,
+      bankAccountNumber: dto.bankAccountNumber,
+      emergencyName: dto.emergencyName,
+      emergencyPhone: dto.emergencyPhone,
+      emergencyRelation: dto.emergencyRelation,
+      guarantorName: dto.guarantorName,
+      guarantorPhone: dto.guarantorPhone,
+      guarantorIdNumber: dto.guarantorIdNumber,
+      guarantorAddress: dto.guarantorAddress,
+      termsAcceptedAt: now,
+      dataConsentAt: now,
+      trackingConsentAt: now,
+      // Pending admin document verification before jobs
+      status: 'PENDING' as const,
+      // Clear any prior rejection so the row re-enters the review queue clean.
+      rejectionReason: null,
+    };
+
+    const profile = existing
+      ? await this.prisma.driverProfile.update({ where: { userId }, data })
+      : (
+          await this.prisma.$transaction([
+            this.prisma.driverProfile.create({ data: { userId, ...data } }),
+            this.prisma.user.update({
+              where: { id: userId },
+              data: { role: Role.DRIVER },
+            }),
+          ])
+        )[0];
 
     await this.notifications.notify(userId, {
       type: 'APPROVAL',
-      title: 'Driver application received',
+      title: isResubmission
+        ? 'Driver application resubmitted'
+        : 'Driver application received',
       body: 'Your documents are under review. You can accept jobs after approval.',
     });
 
     // Alert admins so the KYC queue is actioned promptly (in-app + push).
     void this.notifications.notifyAdmins({
       type: 'APPROVAL',
-      title: 'New driver application',
-      body: `${dto.legalFullName || 'A new driver'} submitted driver KYC and is awaiting review.`,
+      title: isResubmission
+        ? 'Driver application resubmitted'
+        : 'New driver application',
+      body: `${dto.legalFullName || 'A new driver'} ${
+        isResubmission ? 'resubmitted' : 'submitted'
+      } driver KYC and is awaiting review.`,
       data: { kind: 'driver_application', driverId: profile.id },
     });
 
     return {
       ...profile,
-      message:
-        'Application submitted. Admin will verify your ID and vehicle before you can take jobs.',
+      message: isResubmission
+        ? 'Application resubmitted. Admin will review your updated details.'
+        : 'Application submitted. Admin will verify your ID and vehicle before you can take jobs.',
     };
   }
 

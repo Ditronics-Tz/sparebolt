@@ -255,8 +255,7 @@ export function AdminPage() {
     | { type: 'driver'; data: DriverRow }
     | null
   >(null);
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   const loadAll = async () => {
@@ -353,8 +352,6 @@ export function AdminPage() {
       await api.patch(path, { status, reason });
       toast.success(`${type === 'seller' ? 'Seller' : 'Driver'} ${status.toLowerCase()}`);
       setReview(null);
-      setRejectOpen(false);
-      setRejectReason('');
       await loadAll();
     } catch {
       toast.error('Action failed');
@@ -705,7 +702,14 @@ export function AdminPage() {
                               size="sm"
                               variant="secondary"
                               onClick={() =>
-                                void resolveDispute(d.id, 'customer')
+                                setConfirm({
+                                  title: 'Refund the customer?',
+                                  message: `Resolves the dispute on order ${d.order.orderNumber} in the customer's favour and refunds the held escrow. This cannot be undone.`,
+                                  confirmLabel: 'Refund customer',
+                                  tone: 'danger',
+                                  onConfirm: () =>
+                                    resolveDispute(d.id, 'customer'),
+                                })
                               }
                             >
                               Refund customer
@@ -713,7 +717,13 @@ export function AdminPage() {
                             <Button
                               size="sm"
                               onClick={() =>
-                                void resolveDispute(d.id, 'seller')
+                                setConfirm({
+                                  title: 'Release funds to seller?',
+                                  message: `Resolves the dispute on order ${d.order.orderNumber} in the seller's favour and releases the held escrow to the seller. This cannot be undone.`,
+                                  confirmLabel: 'Release to seller',
+                                  tone: 'warning',
+                                  onConfirm: () => resolveDispute(d.id, 'seller'),
+                                })
                               }
                             >
                               Release to seller
@@ -740,61 +750,53 @@ export function AdminPage() {
         <ReviewDrawer
           review={review}
           loading={actionLoading}
-          onClose={() => {
-            setReview(null);
-            setRejectOpen(false);
-          }}
+          onClose={() => setReview(null)}
           onApprove={() =>
-            void setStatus(review.type, review.data.id, 'APPROVED')
+            setConfirm({
+              title: `Approve ${review.type}?`,
+              message: `${reviewLabel(review)} will be approved and gain ${
+                review.type === 'seller'
+                  ? 'access to list and sell parts'
+                  : 'access to accept delivery jobs'
+              }.`,
+              confirmLabel: 'Approve',
+              tone: 'success',
+              onConfirm: () =>
+                setStatus(review.type, review.data.id, 'APPROVED'),
+            })
           }
-          onReject={() => setRejectOpen(true)}
+          onReject={() =>
+            setConfirm({
+              title: 'Reject application?',
+              message: `${reviewLabel(review)} will be rejected. The reason below is shown to the applicant, who can correct and resubmit.`,
+              confirmLabel: 'Confirm reject',
+              tone: 'danger',
+              requireReason: true,
+              reasonLabel: 'Reason (shown to applicant)',
+              reasonPlaceholder: 'Documents incomplete, ID mismatch…',
+              onConfirm: (reason) =>
+                setStatus(
+                  review.type,
+                  review.data.id,
+                  'REJECTED',
+                  reason || 'Documents incomplete or invalid',
+                ),
+            })
+          }
           onSuspend={() =>
-            void setStatus(review.type, review.data.id, 'SUSPENDED')
+            setConfirm({
+              title: 'Suspend account?',
+              message: `${reviewLabel(review)} will be suspended and lose access until reinstated.`,
+              confirmLabel: 'Suspend',
+              tone: 'danger',
+              onConfirm: () =>
+                setStatus(review.type, review.data.id, 'SUSPENDED'),
+            })
           }
         />
       )}
 
-      {/* Reject reason modal */}
-      {rejectOpen && review && (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-4 sm:items-center admin-backdrop-in">
-          <div className="w-full max-w-md rounded-2xl bg-card p-5 shadow-xl admin-modal-in">
-            <h3 className="font-display text-lg font-bold">Reject application</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Add a short reason (shown to the applicant).
-            </p>
-            <textarea
-              className="field-control mt-3 text-sm"
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Documents incomplete, ID mismatch…"
-            />
-            <div className="mt-4 flex gap-2">
-              <Button
-                variant="secondary"
-                className="flex-1"
-                onClick={() => setRejectOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                className="flex-1"
-                loading={actionLoading}
-                onClick={() =>
-                  void setStatus(
-                    review.type,
-                    review.data.id,
-                    'REJECTED',
-                    rejectReason || 'Documents incomplete or invalid',
-                  )
-                }
-              >
-                Confirm reject
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
     </div>
   );
 }
@@ -2127,6 +2129,178 @@ function Empty({ title, body }: { title: string; body: string }) {
       <p className="font-semibold text-foreground/90">{title}</p>
       <p className="mt-1 text-sm text-muted-foreground">{body}</p>
     </div>
+  );
+}
+
+// ─── Confirmation dialog (guards every consequential admin action) ───────────
+
+type ConfirmTone = 'default' | 'success' | 'danger' | 'warning';
+
+type ConfirmRequest = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  tone?: ConfirmTone;
+  /** Show a required free-text reason (e.g. rejection notes). */
+  requireReason?: boolean;
+  reasonLabel?: string;
+  reasonPlaceholder?: string;
+  onConfirm: (reason: string) => Promise<void> | void;
+};
+
+const CONFIRM_TONE: Record<
+  ConfirmTone,
+  {
+    icon: typeof AlertTriangle;
+    iconWrap: string;
+    button: 'default' | 'danger' | 'amber';
+  }
+> = {
+  default: {
+    icon: Shield,
+    iconWrap: 'bg-info-soft text-info-soft-foreground',
+    button: 'default',
+  },
+  success: {
+    icon: CheckCircle2,
+    iconWrap: 'bg-success-soft text-success-soft-foreground',
+    button: 'default',
+  },
+  danger: {
+    icon: AlertTriangle,
+    iconWrap: 'bg-danger-soft text-danger-soft-foreground',
+    button: 'danger',
+  },
+  warning: {
+    icon: AlertTriangle,
+    iconWrap: 'bg-warning-soft text-warning-soft-foreground',
+    button: 'amber',
+  },
+};
+
+function ConfirmDialog({
+  request,
+  onClose,
+}: {
+  request: ConfirmRequest | null;
+  onClose: () => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setReason('');
+    setLoading(false);
+  }, [request]);
+
+  useEffect(() => {
+    if (!request) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !loading) onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [request, loading, onClose]);
+
+  if (!request) return null;
+  const tone = CONFIRM_TONE[request.tone ?? 'default'];
+  const Icon = tone.icon;
+
+  const submit = async () => {
+    if (request.requireReason && !reason.trim()) {
+      toast.error('Please add a short reason');
+      return;
+    }
+    setLoading(true);
+    try {
+      await request.onConfirm(reason.trim());
+      onClose();
+    } catch {
+      // The action surfaces its own error toast; keep the dialog open to retry.
+      setLoading(false);
+    }
+  };
+
+  return createPortal(
+    <div
+      className="admin-backdrop-in fixed inset-0 z-[80] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !loading) onClose();
+      }}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        className="admin-modal-in w-full max-w-md rounded-2xl bg-card p-5 shadow-xl"
+      >
+        <div className="flex items-start gap-3">
+          <span
+            className={cn(
+              'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+              tone.iconWrap,
+            )}
+          >
+            <Icon className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-display text-lg font-bold text-foreground">
+              {request.title}
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {request.message}
+            </p>
+          </div>
+        </div>
+
+        {request.requireReason && (
+          <div className="mt-4">
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+              {request.reasonLabel ?? 'Reason'}
+            </label>
+            <textarea
+              autoFocus
+              className="field-control text-sm"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder={request.reasonPlaceholder ?? 'Add a short note…'}
+            />
+          </div>
+        )}
+
+        <div className="mt-5 flex gap-2">
+          <Button
+            variant="secondary"
+            className="flex-1"
+            disabled={loading}
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant={tone.button}
+            className="flex-1"
+            loading={loading}
+            onClick={() => void submit()}
+          >
+            {request.confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function reviewLabel(
+  review:
+    | { type: 'seller'; data: SellerRow }
+    | { type: 'driver'; data: DriverRow },
+): string {
+  if (review.type === 'seller') return review.data.businessName;
+  return (
+    review.data.legalFullName ||
+    `${review.data.user.firstName} ${review.data.user.lastName}`.trim() ||
+    'This driver'
   );
 }
 

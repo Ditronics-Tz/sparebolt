@@ -411,6 +411,9 @@ export function AccountPage() {
           <p className="mt-1 opacity-80">
             {user.sellerProfile.rejectionReason || t('contactSupport')}
           </p>
+          <Button asChild size="sm" variant="secondary" className="mt-3">
+            <Link to="/account/become-seller">{t('editResubmit')}</Link>
+          </Button>
         </div>
       )}
       {user.driverProfile?.status === 'PENDING' && (
@@ -425,6 +428,9 @@ export function AccountPage() {
           <p className="mt-1 opacity-80">
             {user.driverProfile.rejectionReason || t('contactSupport')}
           </p>
+          <Button asChild size="sm" variant="secondary" className="mt-3">
+            <Link to="/account/become-driver">{t('editResubmit')}</Link>
+          </Button>
         </div>
       )}
 

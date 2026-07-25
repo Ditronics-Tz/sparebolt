@@ -11,7 +11,7 @@ import {
   MapPin,
   Shield,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, type User } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -81,42 +81,89 @@ function Field({
   );
 }
 
+/** All KYC columns returned by /auth/me for a seller profile (superset of the
+ *  trimmed shared type) — used only to prefill the form on resubmission. */
+type SellerProfileDraft = {
+  status?: string;
+  businessName?: string;
+  businessType?: string;
+  description?: string;
+  registrationNumber?: string;
+  tinNumber?: string;
+  yearsTrading?: number | null;
+  legalFullName?: string;
+  nationalId?: string;
+  nationalIdFrontUrl?: string;
+  nationalIdBackUrl?: string;
+  selfieUrl?: string;
+  dateOfBirth?: string | null;
+  secondaryPhone?: string;
+  region?: string;
+  city?: string;
+  addressWard?: string;
+  addressStreet?: string;
+  addressLandmark?: string;
+  shopExteriorUrl?: string;
+  shopInteriorUrl?: string;
+  payoutMethod?: string;
+  payoutPhone?: string;
+  payoutAccountName?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+};
+
+/** Prefill from an existing REJECTED application so the applicant can correct
+ *  and resubmit; otherwise start blank. Consents always reset (re-accept). */
+function buildInitialSellerForm(user: User | null): FormState {
+  const name = user ? `${user.firstName} ${user.lastName}`.trim() : '';
+  const profile = user?.sellerProfile as unknown as
+    | SellerProfileDraft
+    | undefined;
+  const p = profile?.status === 'REJECTED' ? profile : undefined;
+  return {
+    businessName: p?.businessName ?? '',
+    businessType: p?.businessType ?? 'individual',
+    description: p?.description ?? '',
+    registrationNumber: p?.registrationNumber ?? '',
+    tinNumber: p?.tinNumber ?? '',
+    yearsTrading: p?.yearsTrading != null ? String(p.yearsTrading) : '',
+    legalFullName: p?.legalFullName ?? name,
+    nationalId: p?.nationalId ?? '',
+    nationalIdFrontUrl: p?.nationalIdFrontUrl ?? '',
+    nationalIdBackUrl: p?.nationalIdBackUrl ?? '',
+    selfieUrl: p?.selfieUrl ?? '',
+    dateOfBirth: p?.dateOfBirth ? String(p.dateOfBirth).slice(0, 10) : '',
+    secondaryPhone: p?.secondaryPhone ?? '',
+    location: {
+      ...emptyLocation(),
+      region: p?.region ?? '',
+      district: p?.city ?? '',
+      ward: p?.addressWard ?? '',
+      street: p?.addressStreet ?? '',
+      landmark: p?.addressLandmark ?? '',
+    },
+    shopExteriorUrl: p?.shopExteriorUrl ?? '',
+    shopInteriorUrl: p?.shopInteriorUrl ?? '',
+    payoutMethod: p?.payoutMethod ?? 'mobile_money',
+    payoutPhone: p?.payoutPhone ?? user?.phone ?? '',
+    payoutAccountName: p?.payoutAccountName ?? name,
+    bankName: p?.bankName ?? '',
+    bankAccountNumber: p?.bankAccountNumber ?? '',
+    termsAccepted: false,
+    dataConsent: false,
+    accurateListingConsent: false,
+  };
+}
+
 export function BecomeSellerPage() {
   const navigate = useNavigate();
   const refreshMe = useAuthStore((s) => s.refreshMe);
   const user = useAuthStore((s) => s.user);
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState<FormState>({
-    businessName: '',
-    businessType: 'individual',
-    description: '',
-    registrationNumber: '',
-    tinNumber: '',
-    yearsTrading: '',
-    legalFullName: user
-      ? `${user.firstName} ${user.lastName}`.trim()
-      : '',
-    nationalId: '',
-    nationalIdFrontUrl: '',
-    nationalIdBackUrl: '',
-    selfieUrl: '',
-    dateOfBirth: '',
-    secondaryPhone: '',
-    location: emptyLocation(),
-    shopExteriorUrl: '',
-    shopInteriorUrl: '',
-    payoutMethod: 'mobile_money',
-    payoutPhone: user?.phone || '',
-    payoutAccountName: user
-      ? `${user.firstName} ${user.lastName}`.trim()
-      : '',
-    bankName: '',
-    bankAccountNumber: '',
-    termsAccepted: false,
-    dataConsent: false,
-    accurateListingConsent: false,
-  });
+  const [form, setForm] = useState<FormState>(() =>
+    buildInitialSellerForm(user),
+  );
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((f) => ({ ...f, [key]: value }));

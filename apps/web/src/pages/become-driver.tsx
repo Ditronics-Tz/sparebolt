@@ -11,7 +11,7 @@ import {
   Truck,
   Users,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, type User } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -134,22 +134,120 @@ function Field({
   );
 }
 
+/** Superset of driver KYC columns from /auth/me — used to prefill on resubmit. */
+type DriverProfileDraft = {
+  status?: string;
+  legalFullName?: string;
+  nationalId?: string;
+  nationalIdFrontUrl?: string;
+  nationalIdBackUrl?: string;
+  selfieUrl?: string;
+  dateOfBirth?: string | null;
+  secondaryPhone?: string;
+  city?: string;
+  addressWard?: string;
+  addressStreet?: string;
+  addressLandmark?: string;
+  vehicleType?: string;
+  vehiclePlate?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleColor?: string;
+  vehicleYear?: number | null;
+  vehiclePhotoSideUrl?: string;
+  vehiclePhotoRearUrl?: string;
+  vehiclePhotoWithDriverUrl?: string;
+  licenseNumber?: string;
+  licenseClass?: string;
+  licensePhotoUrl?: string;
+  insuranceDocUrl?: string;
+  insuranceExpiresAt?: string | null;
+  payoutMethod?: string;
+  payoutPhone?: string;
+  payoutAccountName?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  emergencyName?: string;
+  emergencyPhone?: string;
+  emergencyRelation?: string;
+  guarantorName?: string;
+  guarantorPhone?: string;
+  guarantorIdNumber?: string;
+  guarantorAddress?: string;
+};
+
+/** Prefill from a REJECTED application so the applicant can correct & resubmit.
+ *  Consents reset via `...initial`; location IDs are re-picked (names shown). */
+function buildInitialDriverForm(user: User | null): FormState {
+  const name = user ? `${user.firstName} ${user.lastName}`.trim() : '';
+  const profile = user?.driverProfile as unknown as
+    | DriverProfileDraft
+    | undefined;
+  const p = profile?.status === 'REJECTED' ? profile : undefined;
+  if (!p) {
+    return {
+      ...initial,
+      legalFullName: name,
+      payoutPhone: user?.phone || '',
+      payoutAccountName: name,
+    };
+  }
+  return {
+    ...initial,
+    legalFullName: p.legalFullName ?? name,
+    nationalId: p.nationalId ?? '',
+    nationalIdFrontUrl: p.nationalIdFrontUrl ?? '',
+    nationalIdBackUrl: p.nationalIdBackUrl ?? '',
+    selfieUrl: p.selfieUrl ?? '',
+    dateOfBirth: p.dateOfBirth ? String(p.dateOfBirth).slice(0, 10) : '',
+    secondaryPhone: p.secondaryPhone ?? '',
+    location: {
+      ...emptyLocation(),
+      district: p.city ?? '',
+      ward: p.addressWard ?? '',
+      street: p.addressStreet ?? '',
+      landmark: p.addressLandmark ?? '',
+    },
+    vehicleType: p.vehicleType ?? 'motorcycle',
+    vehiclePlate: p.vehiclePlate ?? '',
+    vehicleMake: p.vehicleMake ?? '',
+    vehicleModel: p.vehicleModel ?? '',
+    vehicleColor: p.vehicleColor ?? '',
+    vehicleYear: p.vehicleYear != null ? String(p.vehicleYear) : '',
+    vehiclePhotoSideUrl: p.vehiclePhotoSideUrl ?? '',
+    vehiclePhotoRearUrl: p.vehiclePhotoRearUrl ?? '',
+    vehiclePhotoWithDriverUrl: p.vehiclePhotoWithDriverUrl ?? '',
+    licenseNumber: p.licenseNumber ?? '',
+    licenseClass: p.licenseClass ?? '',
+    licensePhotoUrl: p.licensePhotoUrl ?? '',
+    insuranceDocUrl: p.insuranceDocUrl ?? '',
+    insuranceExpiresAt: p.insuranceExpiresAt
+      ? String(p.insuranceExpiresAt).slice(0, 10)
+      : '',
+    payoutMethod: p.payoutMethod ?? 'mobile_money',
+    payoutPhone: p.payoutPhone ?? user?.phone ?? '',
+    payoutAccountName: p.payoutAccountName ?? name,
+    bankName: p.bankName ?? '',
+    bankAccountNumber: p.bankAccountNumber ?? '',
+    emergencyName: p.emergencyName ?? '',
+    emergencyPhone: p.emergencyPhone ?? '',
+    emergencyRelation: p.emergencyRelation ?? '',
+    guarantorName: p.guarantorName ?? '',
+    guarantorPhone: p.guarantorPhone ?? '',
+    guarantorIdNumber: p.guarantorIdNumber ?? '',
+    guarantorAddress: p.guarantorAddress ?? '',
+  };
+}
+
 export function BecomeDriverPage() {
   const navigate = useNavigate();
   const refreshMe = useAuthStore((s) => s.refreshMe);
   const user = useAuthStore((s) => s.user);
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState<FormState>({
-    ...initial,
-    legalFullName: user
-      ? `${user.firstName} ${user.lastName}`.trim()
-      : '',
-    payoutPhone: user?.phone || '',
-    payoutAccountName: user
-      ? `${user.firstName} ${user.lastName}`.trim()
-      : '',
-  });
+  const [form, setForm] = useState<FormState>(() =>
+    buildInitialDriverForm(user),
+  );
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
