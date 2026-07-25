@@ -89,7 +89,7 @@ export class AdminService {
     const since = new Date(Date.now() - days * 86_400_000);
     const where = { createdAt: { gte: since } };
 
-    const [totalVisits, uniqueRows, topPaths, topLocations, recentVisits] =
+    const [totalVisits, uniqueRows, topPaths, visitsForLocations, recentVisits] =
       await Promise.all([
         this.prisma.visitEvent.count({ where }),
         this.prisma.visitEvent.findMany({
@@ -104,53 +104,70 @@ export class AdminService {
           orderBy: { _count: { path: 'desc' } },
           take: 10,
         }),
-        this.prisma.visitEvent.groupBy({
-          by: ['country', 'region', 'city'],
+        this.prisma.visitEvent.findMany({
           where,
-          _count: { _all: true },
-          orderBy: { _count: { country: 'desc' } },
-          take: 10,
+          orderBy: { createdAt: 'desc' },
+          take: 10000,
+          select: visitLocationSelect,
         }),
         this.prisma.visitEvent.findMany({
           where,
           orderBy: { createdAt: 'desc' },
           take: 25,
-          select: {
-            id: true,
-            path: true,
-            referrer: true,
-            country: true,
-            region: true,
-            city: true,
-            createdAt: true,
-            user: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                role: true,
-              },
-            },
-          },
+          select: visitLocationSelect,
         }),
       ]);
+
+    const trends = await this.visitTrends(days, since);
+    const topLocations = aggregateLocations(visitsForLocations).slice(0, 10);
 
     return {
       range: `${days}d`,
       totalVisits,
       uniqueVisitors: uniqueRows.length,
+      trends,
       topPaths: topPaths.map((row) => ({
         path: row.path,
         visits: row._count._all,
       })),
-      topLocations: topLocations.map((row) => ({
-        country: row.country || 'Unknown',
-        region: row.region,
-        city: row.city,
-        visits: row._count._all,
+      topLocations,
+      recentVisits: recentVisits.map((visit) => ({
+        ...visit,
+        ...effectiveVisitLocation(visit),
       })),
-      recentVisits,
     };
+  }
+
+  private async visitTrends(days: number, since: Date) {
+    const rows = await this.prisma.$queryRaw<
+      { day: Date; visits: bigint; uniqueVisitors: bigint }[]
+    >`
+      SELECT
+        date_trunc('day', "createdAt") AS day,
+        COUNT(*)::bigint AS visits,
+        COUNT(DISTINCT COALESCE("ipHash", id))::bigint AS "uniqueVisitors"
+      FROM "visit_events"
+      WHERE "createdAt" >= ${since}
+      GROUP BY day
+      ORDER BY day ASC
+    `;
+    const byDate = new Map(
+      rows.map((row) => [
+        row.day.toISOString().slice(0, 10),
+        {
+          date: row.day.toISOString().slice(0, 10),
+          visits: Number(row.visits),
+          uniqueVisitors: Number(row.uniqueVisitors),
+        },
+      ]),
+    );
+
+    return Array.from({ length: days }, (_, index) => {
+      const date = new Date(since);
+      date.setDate(since.getDate() + index + 1);
+      const key = date.toISOString().slice(0, 10);
+      return byDate.get(key) ?? { date: key, visits: 0, uniqueVisitors: 0 };
+    });
   }
 
   async setUserActive(userId: string, isActive: boolean) {
@@ -386,4 +403,90 @@ export class AdminService {
       take: 200,
     });
   }
+}
+
+const visitLocationSelect = {
+  id: true,
+  path: true,
+  referrer: true,
+  country: true,
+  region: true,
+  city: true,
+  createdAt: true,
+  user: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      sellerProfile: { select: { city: true, region: true } },
+      driverProfile: { select: { city: true } },
+      addresses: {
+        where: { isDefault: true },
+        take: 1,
+        select: { city: true, region: true },
+      },
+    },
+  },
+} as const;
+
+type VisitLocationRow = {
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  user: {
+    sellerProfile: { city: string; region: string | null } | null;
+    driverProfile: { city: string } | null;
+    addresses: { city: string; region: string | null }[];
+  } | null;
+};
+
+function aggregateLocations(visits: VisitLocationRow[]) {
+  const map = new Map<
+    string,
+    {
+      country: string;
+      region: string | null;
+      city: string | null;
+      visits: number;
+    }
+  >();
+
+  for (const visit of visits) {
+    const location = effectiveVisitLocation(visit);
+    const key = [location.country, location.region, location.city].join('|');
+    const current = map.get(key) ?? { ...location, visits: 0 };
+    current.visits += 1;
+    map.set(key, current);
+  }
+
+  return [...map.values()].sort((a, b) => b.visits - a.visits);
+}
+
+function effectiveVisitLocation(visit: VisitLocationRow) {
+  if (
+    (visit.country && visit.country !== 'Unknown') ||
+    visit.region ||
+    visit.city
+  ) {
+    return {
+      country: visit.country || 'Unknown',
+      region: visit.region,
+      city: visit.city,
+    };
+  }
+
+  const address = visit.user?.addresses[0];
+  const city =
+    visit.user?.sellerProfile?.city ||
+    visit.user?.driverProfile?.city ||
+    address?.city ||
+    null;
+  const region = visit.user?.sellerProfile?.region || address?.region || null;
+
+  return {
+    country: city || region ? 'Tanzania' : 'Unknown',
+    region,
+    city,
+  };
 }

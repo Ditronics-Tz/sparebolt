@@ -190,6 +190,11 @@ type VisitAnalytics = {
   range: VisitRange;
   totalVisits: number;
   uniqueVisitors: number;
+  trends: {
+    date: string;
+    visits: number;
+    uniqueVisitors: number;
+  }[];
   topPaths: { path: string; visits: number }[];
   topLocations: {
     country: string;
@@ -1487,6 +1492,16 @@ function VisitAnalyticsPanel({
         />
       </div>
 
+      <div className="rounded-2xl border border-border bg-card shadow-sm">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <h3 className="font-display font-bold">Visit trend</h3>
+          <p className="text-xs font-semibold text-muted-foreground">
+            Daily visits
+          </p>
+        </div>
+        <VisitTrendChart rows={data?.trends ?? []} loading={loading} />
+      </div>
+
       <div className="grid gap-5 xl:grid-cols-2">
         <div className="rounded-2xl border border-border bg-card shadow-sm">
           <div className="border-b border-border px-4 py-3">
@@ -1599,6 +1614,62 @@ function VisitAnalyticsPanel({
       </div>
     </section>
   );
+}
+
+function VisitTrendChart({
+  rows,
+  loading,
+}: {
+  rows: VisitAnalytics['trends'];
+  loading: boolean;
+}) {
+  const maxVisits = Math.max(1, ...rows.map((row) => row.visits));
+  const visibleRows = rows.slice(-30);
+
+  return (
+    <div className="p-4">
+      <div
+        className={cn(
+          'flex h-44 items-end gap-1.5 overflow-x-auto rounded-xl bg-muted/40 px-3 py-3',
+          loading && 'animate-pulse',
+        )}
+      >
+        {visibleRows.map((row) => {
+          const height = Math.max(6, (row.visits / maxVisits) * 100);
+          return (
+            <div
+              key={row.date}
+              className="flex h-full min-w-6 flex-1 flex-col items-center justify-end gap-2"
+              title={`${row.date}: ${row.visits} visits, ${row.uniqueVisitors} unique`}
+            >
+              <div className="flex w-full flex-1 items-end">
+                <div
+                  className="w-full rounded-t-md bg-bolt-600 transition-all"
+                  style={{ height: `${height}%` }}
+                />
+              </div>
+              <span className="text-[10px] font-semibold text-muted-foreground">
+                {formatTrendDay(row.date)}
+              </span>
+            </div>
+          );
+        })}
+        {!visibleRows.length && (
+          <p className="m-auto text-sm text-muted-foreground">
+            No visit trend data for this range
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatTrendDay(date: string) {
+  const parsed = new Date(`${date}T00:00:00`);
+  return parsed.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
 function AnalyticsKpi({

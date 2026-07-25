@@ -16,7 +16,11 @@ export class AnalyticsService {
 
   async trackVisit(input: TrackVisitInput) {
     const path = normalizePath(input.path);
-    const location = locationFromHeaders(input.req);
+    const headerLocation = locationFromHeaders(input.req);
+    const location =
+      isKnownLocation(headerLocation) || !input.userId
+        ? headerLocation
+        : await this.locationFromUserProfile(input.userId);
     const ip = clientIp(input.req);
 
     await this.prisma.visitEvent.create({
@@ -33,6 +37,32 @@ export class AnalyticsService {
     });
 
     return { ok: true };
+  }
+
+  private async locationFromUserProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        sellerProfile: { select: { city: true, region: true } },
+        driverProfile: { select: { city: true } },
+        addresses: {
+          where: { isDefault: true },
+          take: 1,
+          select: { city: true, region: true },
+        },
+      },
+    });
+
+    const address = user?.addresses[0];
+    const city =
+      user?.sellerProfile?.city || user?.driverProfile?.city || address?.city;
+    const region = user?.sellerProfile?.region || address?.region;
+
+    return {
+      country: city || region ? 'Tanzania' : 'Unknown',
+      region: region || null,
+      city: city || null,
+    };
   }
 }
 
@@ -77,4 +107,16 @@ function locationFromHeaders(req: Request) {
     decodeHeader(req.get('x-city'));
 
   return { country, region, city };
+}
+
+function isKnownLocation(location: {
+  country?: string | null;
+  region?: string | null;
+  city?: string | null;
+}) {
+  return Boolean(
+    (location.country && location.country !== 'Unknown') ||
+      location.region ||
+      location.city,
+  );
 }
