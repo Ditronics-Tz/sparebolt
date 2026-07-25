@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { DashboardSquare01Icon } from '@hugeicons/core-free-icons';
 import {
   CartesianGrid,
   Line,
@@ -228,12 +230,26 @@ type VisitAnalytics = {
   }[];
 };
 
+function OverviewIcon({ className }: { className?: string }) {
+  return (
+    <HugeiconsIcon
+      icon={DashboardSquare01Icon}
+      size={24}
+      color="currentColor"
+      strokeWidth={1.5}
+      className={className}
+    />
+  );
+}
+
+type NavIcon = typeof LayoutDashboard | typeof OverviewIcon;
+
 const NAV: {
   id: TabId;
   label: string;
-  icon: typeof LayoutDashboard;
+  icon: NavIcon;
 }[] = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'overview', label: 'Overview', icon: OverviewIcon },
   { id: 'users', label: 'Users', icon: Users },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'sellers', label: 'Sellers', icon: Store },
