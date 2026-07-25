@@ -1,37 +1,897 @@
-{
-  "Toyota": ["Corolla", "Corolla Fielder", "Corolla Axio", "Premio", "Allion", "Camry", "Vitz", "Passo", "Belta", "Platz", "Ractis", "Wish", "Ist", "Mark X", "Crown", "Harrier", "RAV4", "Vanguard", "Land Cruiser", "Land Cruiser Prado", "Fortuner", "Rush", "Hilux", "Hiace", "Noah", "Voxy", "Alphard", "Sienta", "Probox", "Succeed", "Dyna", "Coaster", "Yaris", "Aqua", "Prius", "Spacio"],
-  "Nissan": ["March", "Note", "Tiida", "Sunny", "Sylphy", "Bluebird", "Wingroad", "AD Van", "Juke", "Qashqai", "X-Trail", "Dualis", "Murano", "Patrol", "Navara", "Serena", "Caravan", "Vanette", "Atlas", "Teana", "Skyline", "Elgrand", "Latio", "Cube"],
-  "Honda": ["Fit", "Fit Shuttle", "Grace", "Civic", "Accord", "Insight", "Airwave", "Stream", "Freed", "Vezel", "HR-V", "CR-V", "Stepwgn", "Odyssey", "Partner", "Shuttle"],
-  "Mitsubishi": ["Lancer", "Galant", "Colt", "Mirage", "RVR", "ASX", "Outlander", "Pajero", "Pajero Sport", "Montero", "L200", "Triton", "Canter", "Fuso", "Delica"],
-  "Isuzu": ["D-Max", "MU-X", "Trooper", "Bighorn", "Elf", "NPR", "NQR", "NKR", "Forward", "FRR", "FVR", "Giga"],
-  "Suzuki": ["Alto", "Swift", "Baleno", "Wagon R", "Every", "Carry", "APV", "Ertiga", "Jimny", "Escudo", "Vitara", "Grand Vitara", "SX4", "Celerio"],
-  "Mazda": ["Demio", "Mazda2", "Mazda3", "Axela", "Mazda6", "Atenza", "CX-3", "CX-5", "CX-7", "CX-8", "Familia", "Premacy", "Verisa", "Bongo", "BT-50", "Tribute", "MPV"],
-  "Subaru": ["Impreza", "Legacy", "Outback", "Forester", "XV", "Exiga", "Trezia", "Levorg", "WRX"],
-  "Mercedes-Benz": ["A-Class", "B-Class", "C-Class", "E-Class", "S-Class", "CLA", "GLA", "GLC", "GLK", "ML", "GLE", "GL", "G-Class", "Vito", "Sprinter", "Actros", "Axor", "Atego"],
-  "BMW": ["1 Series", "2 Series", "3 Series", "4 Series", "5 Series", "7 Series", "X1", "X3", "X5", "X6"],
-  "Audi": ["A3", "A4", "A6", "A8", "Q3", "Q5", "Q7"],
-  "Volkswagen": ["Polo", "Golf", "Jetta", "Passat", "Tiguan", "Touareg", "Amarok", "Caddy", "Transporter"],
-  "Land Rover": ["Defender", "Discovery", "Discovery Sport", "Freelander", "Range Rover", "Range Rover Sport", "Range Rover Evoque", "Range Rover Vogue"],
-  "Ford": ["Fiesta", "Focus", "Ranger", "Everest", "Escape", "EcoSport", "Transit", "F-150"],
-  "Hyundai": ["i10", "i20", "Accent", "Getz", "Elantra", "Sonata", "Tucson", "ix35", "Santa Fe", "Creta", "H-1", "H100"],
-  "Kia": ["Picanto", "Rio", "Cerato", "Sportage", "Sorento", "Optima", "Carens", "K2700", "Sportage R"],
-  "Daihatsu": ["Mira", "Move", "Boon", "Sirion", "Terios", "Hijet", "Charade"],
-  "Volvo": ["XC60", "XC90", "S60", "S90", "FH", "FM", "FMX"],
-  "Scania": ["P-Series", "G-Series", "R-Series", "S-Series"],
-  "Hino": ["Dutro", "Ranger", "300 Series", "500 Series", "700 Series"],
-  "MAN": ["TGS", "TGA", "TGX", "TGM"],
-  "Tata": ["Xenon", "Super Ace", "Ace", "Prima", "LPT", "Indica"],
-  "Peugeot": ["206", "207", "307", "308", "3008", "5008", "508", "Partner", "Boxer"],
-  "Chevrolet": ["Spark", "Aveo", "Cruze", "Captiva", "Trailblazer"],
-  "Renault": ["Duster", "Kwid", "Logan", "Sandero"],
-  "Suzuki (Motorcycle)": ["GN125", "GS150", "GD110", "Boulevard"],
-  "TVS": ["Star HLX", "Star HLX 125", "Apache", "Apache RTR", "King", "XL100", "Neo"],
-  "Bajaj": ["Boxer", "Boxer BM100", "Boxer BM150", "CT100", "Pulsar", "Discover", "Platina", "RE (Three-wheeler)"],
-  "Yamaha": ["Crux", "YBR125", "Vega", "Sniper", "Crux Rev"],
-  "Honda (Motorcycle)": ["CG125", "Ace CB125", "XL125", "CGL125", "CRF"],
-  "Skygo": ["SG125", "SG150", "SG200"],
-  "Sanya": ["SY125", "SY150"],
-  "Haojue": ["HJ125", "HJ150"],
-  "Lifan": ["LF125", "LF150"],
-  "Jincheng": ["JC125", "JC150"]
-}
+[
+  {
+    "make": "Toyota",
+    "models": [
+      "4Runner",
+      "Allex",
+      "Allion",
+      "Alphard",
+      "Aqua",
+      "Aurion",
+      "Avanza",
+      "Avensis",
+      "Axio",
+      "Belta",
+      "Blade",
+      "C-HR",
+      "Caldina",
+      "Camry",
+      "Carina",
+      "Celica",
+      "Coaster",
+      "Corolla",
+      "Corolla Cross",
+      "Corolla Fielder",
+      "Corolla Rumion",
+      "Crown",
+      "Duet",
+      "Esquire",
+      "Estima",
+      "Fortuner",
+      "FunCargo",
+      "Gaia",
+      "Granvia",
+      "Harrier",
+      "Hiace",
+      "Highlander",
+      "Hilux",
+      "IST",
+      "Kluger",
+      "Land Cruiser",
+      "Land Cruiser Prado",
+      "LiteAce",
+      "Mark II",
+      "Mark X",
+      "Noah",
+      "Passo",
+      "Platz",
+      "Porte",
+      "Premio",
+      "Prius",
+      "Probox",
+      "Ractis",
+      "Raize",
+      "RAV4",
+      "Regius",
+      "Roomy",
+      "Rush",
+      "Sienta",
+      "Spacio",
+      "Spade",
+      "Sprinter",
+      "Starlet",
+      "Succeed",
+      "Surf",
+      "TownAce",
+      "Vanguard",
+      "Vellfire",
+      "Verossa",
+      "Vios",
+      "Vitz",
+      "Voxy",
+      "Wish",
+      "Yaris",
+      "Other"
+    ]
+  },
+  {
+    "make": "Nissan",
+    "models": [
+      "AD Van",
+      "Almera",
+      "Atlas",
+      "Bluebird",
+      "Caravan",
+      "Cedric",
+      "Cefiro",
+      "Civilian",
+      "Cube",
+      "Dualis",
+      "Elgrand",
+      "Expert",
+      "Fairlady Z",
+      "Fuga",
+      "Juke",
+      "Kicks",
+      "Lafesta",
+      "Latio",
+      "March",
+      "Micra",
+      "Murano",
+      "Navara",
+      "Note",
+      "NV200",
+      "NV350 Caravan",
+      "Pathfinder",
+      "Patrol",
+      "Primera",
+      "Qashqai",
+      "Safari",
+      "Serena",
+      "Skyline",
+      "Sunny",
+      "Sylphy",
+      "Teana",
+      "Terrano",
+      "Tiida",
+      "Vanette",
+      "Wingroad",
+      "X-Trail",
+      "Other"
+    ]
+  },
+  {
+    "make": "Mitsubishi",
+    "models": [
+      "Airtrek",
+      "ASX",
+      "Canter",
+      "Chariot",
+      "Colt",
+      "Delica",
+      "Diamante",
+      "Dion",
+      "Eclipse Cross",
+      "Fuso Fighter",
+      "Galant",
+      "Grandis",
+      "L200",
+      "Lancer",
+      "Minica",
+      "Mirage",
+      "Outlander",
+      "Pajero",
+      "Pajero iO",
+      "Pajero Mini",
+      "RVR",
+      "Shogun",
+      "Triton",
+      "Other"
+    ]
+  },
+  {
+    "make": "Honda",
+    "models": [
+      "Accord",
+      "Airwave",
+      "CR-V",
+      "CR-Z",
+      "Civic",
+      "Crossroad",
+      "Edix",
+      "Element",
+      "Elysion",
+      "Fit",
+      "Fit Shuttle",
+      "Freed",
+      "Grace",
+      "HR-V",
+      "Insight",
+      "Integra",
+      "Jade",
+      "Mobilio",
+      "Odyssey",
+      "Partner",
+      "Pilot",
+      "Shuttle",
+      "Stepwgn",
+      "Stream",
+      "Vezel",
+      "Other"
+    ]
+  },
+  {
+    "make": "Subaru",
+    "models": [
+      "BRZ",
+      "Exiga",
+      "Forester",
+      "Impreza",
+      "Justy",
+      "Legacy",
+      "Levorg",
+      "Outback",
+      "Pleo",
+      "R1",
+      "R2",
+      "Stella",
+      "Trezia",
+      "Tribeca",
+      "WRX",
+      "XV",
+      "Other"
+    ]
+  },
+  {
+    "make": "Mazda",
+    "models": [
+      "Axela",
+      "Atenza",
+      "B-Series",
+      "Biante",
+      "BT-50",
+      "Carol",
+      "CX-3",
+      "CX-30",
+      "CX-5",
+      "CX-7",
+      "CX-8",
+      "CX-9",
+      "Demio",
+      "Familia",
+      "MPV",
+      "Premacy",
+      "Proceed",
+      "RX-8",
+      "Scrum",
+      "Tribute",
+      "Verisa",
+      "Other"
+    ]
+  },
+  {
+    "make": "Suzuki",
+    "models": [
+      "Alto",
+      "Baleno",
+      "Carry",
+      "Celerio",
+      "Cultus",
+      "Escudo",
+      "Every",
+      "Grand Vitara",
+      "Hustler",
+      "Ignis",
+      "Jimny",
+      "Kizashi",
+      "LandY",
+      "S-Presso",
+      "Solio",
+      "Spacia",
+      "Splash",
+      "Swift",
+      "SX4",
+      "Vitara",
+      "Wagon R",
+      "XL7",
+      "Other"
+    ]
+  },
+  {
+    "make": "Isuzu",
+    "models": [
+      "Bighorn",
+      "D-Max",
+      "Elf",
+      "Forward",
+      "Gemini",
+      "MU",
+      "MU-X",
+      "N-Series",
+      "Trooper",
+      "Other"
+    ]
+  },
+  {
+    "make": "Daihatsu",
+    "models": [
+      "Atrai",
+      "Be-Go",
+      "Boon",
+      "Cast",
+      "Charade",
+      "Copen",
+      "Esse",
+      "Hijet",
+      "Mira",
+      "Move",
+      "Rocky",
+      "Sonica",
+      "Taft",
+      "Tanto",
+      "Terios",
+      "Thor",
+      "Wake",
+      "YRV",
+      "Other"
+    ]
+  },
+  {
+    "make": "Lexus",
+    "models": [
+      "CT",
+      "ES",
+      "GS",
+      "GX",
+      "HS",
+      "IS",
+      "LC",
+      "LM",
+      "LS",
+      "LX",
+      "NX",
+      "RC",
+      "RX",
+      "SC",
+      "UX",
+      "Other"
+    ]
+  },
+  {
+    "make": "Mercedes-Benz",
+    "models": [
+      "A-Class",
+      "B-Class",
+      "C-Class",
+      "CLA-Class",
+      "CLK-Class",
+      "CLS-Class",
+      "E-Class",
+      "G-Class",
+      "GL-Class",
+      "GLA-Class",
+      "GLB-Class",
+      "GLC-Class",
+      "GLE-Class",
+      "GLK-Class",
+      "GLS-Class",
+      "M-Class",
+      "S-Class",
+      "SL-Class",
+      "SLK-Class",
+      "Sprinter",
+      "V-Class",
+      "Viano",
+      "Vito",
+      "Actros",
+      "Atego",
+      "Axor",
+      "Other"
+    ]
+  },
+  {
+    "make": "BMW",
+    "models": [
+      "1 Series",
+      "2 Series",
+      "3 Series",
+      "4 Series",
+      "5 Series",
+      "6 Series",
+      "7 Series",
+      "8 Series",
+      "X1",
+      "X2",
+      "X3",
+      "X4",
+      "X5",
+      "X6",
+      "X7",
+      "Z3",
+      "Z4",
+      "i3",
+      "i4",
+      "iX",
+      "Other"
+    ]
+  },
+  {
+    "make": "Volkswagen",
+    "models": [
+      "Amarok",
+      "Arteon",
+      "Beetle",
+      "Bora",
+      "Caddy",
+      "Golf",
+      "Jetta",
+      "Passat",
+      "Polo",
+      "Sharan",
+      "T-Cross",
+      "T-Roc",
+      "Taos",
+      "Tiguan",
+      "Touareg",
+      "Touran",
+      "Transporter",
+      "Vento",
+      "Other"
+    ]
+  },
+  {
+    "make": "Land Rover",
+    "models": [
+      "Defender",
+      "Discovery",
+      "Discovery Sport",
+      "Freelander",
+      "Range Rover",
+      "Range Rover Evoque",
+      "Range Rover Sport",
+      "Range Rover Velar",
+      "Other"
+    ]
+  },
+  {
+    "make": "Ford",
+    "models": [
+      "EcoSport",
+      "Edge",
+      "Escape",
+      "Everest",
+      "Expedition",
+      "Explorer",
+      "F-150",
+      "Fiesta",
+      "Focus",
+      "Kuga",
+      "Mondeo",
+      "Mustang",
+      "Ranger",
+      "Territory",
+      "Transit",
+      "Other"
+    ]
+  },
+  {
+    "make": "Hyundai",
+    "models": [
+      "Accent",
+      "Atos",
+      "Creta",
+      "Elantra",
+      "Galloper",
+      "Genesis",
+      "Getz",
+      "Grand i10",
+      "H-1",
+      "H100",
+      "i10",
+      "i20",
+      "i30",
+      "ix35",
+      "Kona",
+      "Palisade",
+      "Santa Fe",
+      "Sonata",
+      "Starex",
+      "Terracan",
+      "Tucson",
+      "Venue",
+      "Other"
+    ]
+  },
+  {
+    "make": "Kia",
+    "models": [
+      "Bongo",
+      "Carens",
+      "Carnival",
+      "Cerato",
+      "K5",
+      "K2700",
+      "Mohave",
+      "Morning",
+      "Optima",
+      "Picanto",
+      "Rio",
+      "Sedona",
+      "Seltos",
+      "Sorento",
+      "Soul",
+      "Sportage",
+      "Stinger",
+      "Other"
+    ]
+  },
+  {
+    "make": "Audi",
+    "models": [
+      "A1",
+      "A3",
+      "A4",
+      "A5",
+      "A6",
+      "A7",
+      "A8",
+      "Q2",
+      "Q3",
+      "Q5",
+      "Q7",
+      "Q8",
+      "TT",
+      "Other"
+    ]
+  },
+  {
+    "make": "Jeep",
+    "models": [
+      "Cherokee",
+      "Commander",
+      "Compass",
+      "Gladiator",
+      "Grand Cherokee",
+      "Patriot",
+      "Renegade",
+      "Wrangler",
+      "Other"
+    ]
+  },
+  {
+    "make": "Volvo",
+    "models": [
+      "C30",
+      "S40",
+      "S60",
+      "S80",
+      "S90",
+      "V40",
+      "V60",
+      "V70",
+      "XC40",
+      "XC60",
+      "XC70",
+      "XC90",
+      "FH",
+      "FM",
+      "Other"
+    ]
+  },
+  {
+    "make": "Peugeot",
+    "models": [
+      "206",
+      "207",
+      "208",
+      "301",
+      "307",
+      "308",
+      "3008",
+      "406",
+      "407",
+      "408",
+      "5008",
+      "508",
+      "Partner",
+      "Other"
+    ]
+  },
+  {
+    "make": "Renault",
+    "models": [
+      "Captur",
+      "Clio",
+      "Duster",
+      "Fluence",
+      "Kangoo",
+      "Koleos",
+      "Logan",
+      "Master",
+      "Megane",
+      "Sandero",
+      "Scenic",
+      "Trafic",
+      "Other"
+    ]
+  },
+  {
+    "make": "Chevrolet",
+    "models": [
+      "Aveo",
+      "Captiva",
+      "Colorado",
+      "Cruze",
+      "Optra",
+      "Orlando",
+      "Spark",
+      "Suburban",
+      "Tahoe",
+      "Trailblazer",
+      "Other"
+    ]
+  },
+  {
+    "make": "Opel",
+    "models": [
+      "Astra",
+      "Combo",
+      "Corsa",
+      "Frontera",
+      "Insignia",
+      "Meriva",
+      "Mokka",
+      "Vectra",
+      "Zafira",
+      "Other"
+    ]
+  },
+  {
+    "make": "Fiat",
+    "models": [
+      "500",
+      "Doblo",
+      "Ducato",
+      "Fullback",
+      "Panda",
+      "Punto",
+      "Tipo",
+      "Other"
+    ]
+  },
+  {
+    "make": "Porsche",
+    "models": [
+      "718",
+      "911",
+      "Boxster",
+      "Cayenne",
+      "Cayman",
+      "Macan",
+      "Panamera",
+      "Taycan",
+      "Other"
+    ]
+  },
+  {
+    "make": "Jaguar",
+    "models": [
+      "E-Pace",
+      "F-Pace",
+      "F-Type",
+      "I-Pace",
+      "S-Type",
+      "X-Type",
+      "XE",
+      "XF",
+      "XJ",
+      "Other"
+    ]
+  },
+  {
+    "make": "Chery",
+    "models": [
+      "Arrizo 5",
+      "Arrizo 8",
+      "Tiggo 2",
+      "Tiggo 3",
+      "Tiggo 4",
+      "Tiggo 7",
+      "Tiggo 8",
+      "Other"
+    ]
+  },
+  {
+    "make": "Jetour",
+    "models": [
+      "Dashing",
+      "T1",
+      "T2",
+      "X70",
+      "X70 Plus",
+      "X90",
+      "X90 Plus",
+      "Other"
+    ]
+  },
+  {
+    "make": "Geely",
+    "models": [
+      "Azkarra",
+      "Coolray",
+      "Emgrand",
+      "Monjaro",
+      "Okavango",
+      "Tugella",
+      "Other"
+    ]
+  },
+  {
+    "make": "BYD",
+    "models": [
+      "Atto 3",
+      "Dolphin",
+      "Han",
+      "Seal",
+      "Seal U",
+      "Song Plus",
+      "Tang",
+      "Other"
+    ]
+  },
+  {
+    "make": "Haval",
+    "models": [
+      "H1",
+      "H2",
+      "H6",
+      "H9",
+      "Jolion",
+      "Other"
+    ]
+  },
+  {
+    "make": "Great Wall",
+    "models": [
+      "Cannon",
+      "Poer",
+      "Steed",
+      "Wingle 5",
+      "Wingle 7",
+      "Other"
+    ]
+  },
+  {
+    "make": "JAC",
+    "models": [
+      "JS2",
+      "JS3",
+      "JS4",
+      "JS6",
+      "J7",
+      "T6",
+      "T8",
+      "T9",
+      "X200",
+      "Other"
+    ]
+  },
+  {
+    "make": "Foton",
+    "models": [
+      "Aumark",
+      "Auman",
+      "Sauvana",
+      "Toano",
+      "Tunland",
+      "View",
+      "Other"
+    ]
+  },
+  {
+    "make": "Tata",
+    "models": [
+      "Ace",
+      "Aria",
+      "Indica",
+      "Nexon",
+      "Safari",
+      "Sumo",
+      "Telcoline",
+      "Tiago",
+      "Xenon",
+      "Other"
+    ]
+  },
+  {
+    "make": "Mahindra",
+    "models": [
+      "Bolero",
+      "KUV100",
+      "Pik Up",
+      "Scorpio",
+      "Thar",
+      "XUV300",
+      "XUV500",
+      "XUV700",
+      "Other"
+    ]
+  },
+  {
+    "make": "Hino",
+    "models": [
+      "300 Series",
+      "500 Series",
+      "700 Series",
+      "Dutro",
+      "Ranger",
+      "Profia",
+      "Other"
+    ]
+  },
+  {
+    "make": "Fuso",
+    "models": [
+      "Canter",
+      "Fighter",
+      "Rosa",
+      "Super Great",
+      "Other"
+    ]
+  },
+  {
+    "make": "UD Trucks",
+    "models": [
+      "Condor",
+      "Croner",
+      "Kazet",
+      "Quester",
+      "Quon",
+      "Other"
+    ]
+  },
+  {
+    "make": "Scania",
+    "models": [
+      "G-Series",
+      "K-Series",
+      "L-Series",
+      "P-Series",
+      "R-Series",
+      "S-Series",
+      "Other"
+    ]
+  },
+  {
+    "make": "MAN",
+    "models": [
+      "CLA",
+      "TGA",
+      "TGE",
+      "TGL",
+      "TGM",
+      "TGS",
+      "TGX",
+      "Other"
+    ]
+  },
+  {
+    "make": "Iveco",
+    "models": [
+      "Daily",
+      "Eurocargo",
+      "S-Way",
+      "Stralis",
+      "Trakker",
+      "Other"
+    ]
+  },
+  {
+    "make": "Sinotruk",
+    "models": [
+      "Howo",
+      "Howo A7",
+      "Howo NX",
+      "Howo TX",
+      "Other"
+    ]
+  },
+  {
+    "make": "Shacman",
+    "models": [
+      "F2000",
+      "F3000",
+      "L3000",
+      "X3000",
+      "X5000",
+      "Other"
+    ]
+  },
+  {
+    "make": "Bajaj",
+    "models": [
+      "Boxer",
+      "CT100",
+      "Pulsar",
+      "RE",
+      "Other"
+    ]
+  },
+  {
+    "make": "TVS",
+    "models": [
+      "Apache",
+      "HLX",
+      "King",
+      "Neo",
+      "Star",
+      "Other"
+    ]
+  },
+  {
+    "make": "Other",
+    "models": [
+      "Other"
+    ]
+  }
+]

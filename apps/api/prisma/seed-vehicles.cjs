@@ -37,26 +37,39 @@ const { PrismaClient } = require('@prisma/client');
   const file = path.join(__dirname, 'data', 'vehicle-makes.json');
   const data = JSON.parse(fs.readFileSync(file, 'utf8'));
 
-  let makeCount = 0;
-  let modelCount = 0;
-  for (const [name, models] of Object.entries(data)) {
-    const make = await prisma.vehicleMake.upsert({
-      where: { name },
-      update: {},
-      create: { name },
-    });
-    makeCount++;
-    for (const modelName of models) {
-      await prisma.vehicleModel.upsert({
-        where: { makeId_name: { makeId: make.id, name: modelName } },
-        update: {},
-        create: { makeId: make.id, name: modelName },
-      });
-      modelCount++;
+  // Accept either [{ make, models }] or { make: [models] }, and merge any
+  // duplicate make entries.
+  const entries = Array.isArray(data)
+    ? data.map((m) => [m.make, m.models])
+    : Object.entries(data);
+  const catalogue = new Map();
+  for (const [name, models] of entries) {
+    if (!name) continue;
+    if (!catalogue.has(name)) catalogue.set(name, new Set());
+    for (const model of models || []) {
+      if (model) catalogue.get(name).add(model);
     }
   }
 
-  console.log(`Vehicle catalogue seeded: ${makeCount} makes, ${modelCount} models.`);
+  // Clean sync: the catalogue should exactly match the JSON. Nothing foreign-
+  // keys these tables (listings and driver vehicles store make/model as text),
+  // so a replace is safe. vehicle_models cascade-delete with their make.
+  await prisma.vehicleModel.deleteMany({});
+  await prisma.vehicleMake.deleteMany({});
+
+  let modelCount = 0;
+  for (const [name, models] of catalogue) {
+    const make = await prisma.vehicleMake.create({ data: { name } });
+    const rows = [...models].map((model) => ({ makeId: make.id, name: model }));
+    if (rows.length) {
+      await prisma.vehicleModel.createMany({ data: rows, skipDuplicates: true });
+      modelCount += rows.length;
+    }
+  }
+
+  console.log(
+    `Vehicle catalogue synced: ${catalogue.size} makes, ${modelCount} models.`,
+  );
   await prisma.$disconnect();
 })().catch((e) => {
   console.error(e);

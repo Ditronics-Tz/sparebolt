@@ -262,19 +262,21 @@ async function main() {
     });
   }
 
-  // Vehicle catalogue is maintained in data/vehicle-makes.json (make → models).
+  // Vehicle catalogue is maintained in data/vehicle-makes.json. Accepts either
+  // [{ make, models }] or { make: [models] }.
   const makesFile = path.join(__dirname, 'data', 'vehicle-makes.json');
-  const makes: { name: string; models: string[] }[] = fs.existsSync(makesFile)
-    ? Object.entries(
-        JSON.parse(fs.readFileSync(makesFile, 'utf8')) as Record<
-          string,
-          string[]
-        >,
-      ).map(([name, models]) => ({ name, models }))
-    : [
-        { name: 'Toyota', models: ['Corolla', 'Hilux', 'Land Cruiser'] },
-        { name: 'Nissan', models: ['X-Trail', 'Note', 'Patrol'] },
-      ];
+  let makes: { name: string; models: string[] }[] = [
+    { name: 'Toyota', models: ['Corolla', 'Hilux', 'Land Cruiser'] },
+    { name: 'Nissan', models: ['X-Trail', 'Note', 'Patrol'] },
+  ];
+  if (fs.existsSync(makesFile)) {
+    const raw = JSON.parse(fs.readFileSync(makesFile, 'utf8')) as
+      | { make: string; models: string[] }[]
+      | Record<string, string[]>;
+    makes = Array.isArray(raw)
+      ? raw.map((m) => ({ name: m.make, models: m.models }))
+      : Object.entries(raw).map(([name, models]) => ({ name, models }));
+  }
 
   for (const m of makes) {
     const make = await prisma.vehicleMake.upsert({
