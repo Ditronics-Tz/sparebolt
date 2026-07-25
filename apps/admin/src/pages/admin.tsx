@@ -16,6 +16,7 @@ import {
   YAxis,
 } from 'recharts';
 import { toast } from 'sonner';
+import { jsPDF } from 'jspdf';
 import {
   AlertTriangle,
   ArrowDownLeft,
@@ -1610,16 +1611,6 @@ function ReportMetricCard({
   );
 }
 
-function reportPrintMarkup(report: AdminReport) {
-  const summaryRows = Object.entries(report.summary)
-    .map(([name, metric]) => `<tr><td>${name}</td><td>${metric.value}</td><td>${metric.previous}</td><td>${metric.change == null ? 'n/a' : `${metric.change.toFixed(1)}%`}</td></tr>`)
-    .join('');
-  const seriesRows = report.series
-    .map((row) => `<tr><td>${row.date}</td><td>${row.revenue}</td><td>${row.orders}</td><td>${row.users}</td><td>${row.visits}</td></tr>`)
-    .join('');
-  return `<!doctype html><html><head><title>SpareBolt report - ${report.period.label}</title><style>body{font-family:Arial,sans-serif;color:#172033;padding:32px}h1{margin-bottom:4px}p{color:#5d687b}table{border-collapse:collapse;width:100%;margin:20px 0}th,td{border:1px solid #d9dee8;padding:8px;text-align:left;font-size:12px}th{background:#f1f4f8;text-transform:uppercase;font-size:10px}</style></head><body><h1>SpareBolt admin report</h1><p>${report.period.label} · ${report.period.start.slice(0, 10)} to ${report.period.end.slice(0, 10)}</p><h2>Summary</h2><table><thead><tr><th>Metric</th><th>Value</th><th>Previous</th><th>Change</th></tr></thead><tbody>${summaryRows}</tbody></table><h2>Trend</h2><table><thead><tr><th>Date</th><th>Revenue</th><th>Orders</th><th>New users</th><th>Visits</th></tr></thead><tbody>${seriesRows}</tbody></table></body></html>`;
-}
-
 function ReportsPanel({
   report,
   period,
@@ -1654,28 +1645,79 @@ function ReportsPanel({
 
   const printPdf = () => {
     if (!report) return;
-    const frame = document.createElement('iframe');
-    frame.title = 'Printable SpareBolt report';
-    frame.style.position = 'fixed';
-    frame.style.right = '0';
-    frame.style.bottom = '0';
-    frame.style.width = '1px';
-    frame.style.height = '1px';
-    frame.style.border = '0';
-    frame.style.opacity = '0';
-    frame.onload = () => {
-      const printWindow = frame.contentWindow;
-      if (!printWindow) {
-        frame.remove();
-        toast.error('Unable to prepare the report for printing');
-        return;
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+    const left = 40;
+    const pageBottom = 800;
+    let y = 48;
+    const nextLine = (height = 18) => {
+      if (y + height > pageBottom) {
+        pdf.addPage();
+        y = 48;
       }
-      printWindow.focus();
-      printWindow.addEventListener('afterprint', () => frame.remove(), { once: true });
-      window.setTimeout(() => printWindow.print(), 100);
+      const current = y;
+      y += height;
+      return current;
     };
-    frame.srcdoc = reportPrintMarkup(report);
-    document.body.appendChild(frame);
+    const titleCase = (value: string) => value.replace(/([A-Z])/g, ' $1').replace(/^./, (char) => char.toUpperCase());
+
+    pdf.setTextColor(23, 32, 51);
+    pdf.setFontSize(18);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('SpareBolt admin report', left, nextLine(24));
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(93, 104, 123);
+    pdf.text(`${report.period.label} | ${report.period.start.slice(0, 10)} to ${report.period.end.slice(0, 10)}`, left, nextLine(18));
+
+    y += 12;
+    pdf.setTextColor(23, 32, 51);
+    pdf.setFontSize(13);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Summary', left, nextLine(20));
+    pdf.setFontSize(9);
+    pdf.setFillColor(241, 244, 248);
+    pdf.rect(left, nextLine(18) - 12, 515, 18, 'F');
+    pdf.setTextColor(23, 32, 51);
+    pdf.text('Metric', left + 6, y - 6);
+    pdf.text('Value', left + 260, y - 6);
+    pdf.text('Previous', left + 350, y - 6);
+    pdf.text('Change', left + 445, y - 6);
+    for (const [name, metric] of Object.entries(report.summary)) {
+      const rowY = nextLine(17);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(titleCase(name), left + 6, rowY);
+      pdf.text(String(Math.round(metric.value)), left + 260, rowY);
+      pdf.text(String(Math.round(metric.previous)), left + 350, rowY);
+      pdf.text(metric.change == null ? 'n/a' : `${metric.change.toFixed(1)}%`, left + 445, rowY);
+      pdf.setDrawColor(220, 225, 232);
+      pdf.line(left, rowY + 5, left + 515, rowY + 5);
+    }
+
+    y += 14;
+    pdf.setFontSize(13);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Trend', left, nextLine(20));
+    pdf.setFontSize(9);
+    const trendHeaderY = nextLine(18);
+    pdf.setFillColor(241, 244, 248);
+    pdf.rect(left, trendHeaderY - 12, 515, 18, 'F');
+    pdf.text('Date', left + 6, trendHeaderY - 6);
+    pdf.text('Revenue', left + 150, trendHeaderY - 6);
+    pdf.text('Orders', left + 270, trendHeaderY - 6);
+    pdf.text('New users', left + 360, trendHeaderY - 6);
+    pdf.text('Visits', left + 455, trendHeaderY - 6);
+    for (const row of report.series) {
+      const rowY = nextLine(17);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(row.date, left + 6, rowY);
+      pdf.text(String(Math.round(row.revenue)), left + 150, rowY);
+      pdf.text(String(row.orders), left + 270, rowY);
+      pdf.text(String(row.users), left + 360, rowY);
+      pdf.text(String(row.visits), left + 455, rowY);
+      pdf.setDrawColor(220, 225, 232);
+      pdf.line(left, rowY + 5, left + 515, rowY + 5);
+    }
+    pdf.save(`sparebolt-report-${anchor}.pdf`);
   };
 
   const periodOptions: { value: ReportPeriod; label: string }[] = [
