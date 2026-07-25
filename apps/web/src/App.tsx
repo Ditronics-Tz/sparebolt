@@ -19,6 +19,7 @@ import {
   NewListingPage,
   SellerDashboardPage,
   SellerListingsPage,
+  SellerListingDetailPage,
   SellerSalesPage,
 } from '@/pages/seller';
 import { SellerPromosPage } from '@/pages/seller-promos';
@@ -114,6 +115,14 @@ export default function App() {
             element={
               <ProtectedRoute roles={['SELLER']}>
                 <NewListingPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="seller/listings/:id"
+            element={
+              <ProtectedRoute roles={['SELLER']}>
+                <SellerListingDetailPage />
               </ProtectedRoute>
             }
           />

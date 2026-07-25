@@ -262,28 +262,19 @@ async function main() {
     });
   }
 
-  const makes = [
-    {
-      name: 'Toyota',
-      models: ['Corolla', 'Hilux', 'Rav4', 'Land Cruiser', 'Vitz', 'Wish'],
-    },
-    {
-      name: 'Nissan',
-      models: ['X-Trail', 'Navara', 'Note', 'Tiida', 'Patrol'],
-    },
-    {
-      name: 'Honda',
-      models: ['Fit', 'CR-V', 'Civic', 'Accord'],
-    },
-    {
-      name: 'Mitsubishi',
-      models: ['Lancer', 'Pajero', 'Outlander', 'Canter'],
-    },
-    {
-      name: 'Isuzu',
-      models: ['D-Max', 'NQR', 'Elf'],
-    },
-  ];
+  // Vehicle catalogue is maintained in data/vehicle-makes.json (make → models).
+  const makesFile = path.join(__dirname, 'data', 'vehicle-makes.json');
+  const makes: { name: string; models: string[] }[] = fs.existsSync(makesFile)
+    ? Object.entries(
+        JSON.parse(fs.readFileSync(makesFile, 'utf8')) as Record<
+          string,
+          string[]
+        >,
+      ).map(([name, models]) => ({ name, models }))
+    : [
+        { name: 'Toyota', models: ['Corolla', 'Hilux', 'Land Cruiser'] },
+        { name: 'Nissan', models: ['X-Trail', 'Note', 'Patrol'] },
+      ];
 
   for (const m of makes) {
     const make = await prisma.vehicleMake.upsert({

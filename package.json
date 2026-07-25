@@ -17,6 +17,7 @@
     "db:generate": "npm run prisma:generate --workspace=apps/api",
     "db:migrate": "npm run prisma:migrate --workspace=apps/api",
     "db:seed": "npm run prisma:seed --workspace=apps/api",
+    "db:seed:vehicles": "node apps/api/prisma/seed-vehicles.cjs",
     "db:studio": "npm run prisma:studio --workspace=apps/api"
   },
   "engines": {

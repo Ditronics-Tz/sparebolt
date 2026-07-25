@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { api, type User } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
+import { VehicleMakeModelPicker } from '@/components/vehicle-make-model-picker';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -488,21 +489,15 @@ export function BecomeDriverPage() {
                 required
               />
             </Field>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Make">
-                <Input
-                  value={form.vehicleMake}
-                  onChange={(e) => set('vehicleMake', e.target.value)}
-                  placeholder="TVS, Bajaj…"
-                />
-              </Field>
-              <Field label="Model">
-                <Input
-                  value={form.vehicleModel}
-                  onChange={(e) => set('vehicleModel', e.target.value)}
-                />
-              </Field>
-            </div>
+            <Field label="Make & model">
+              <VehicleMakeModelPicker
+                make={form.vehicleMake}
+                model={form.vehicleModel}
+                onChange={(vehicleMake, vehicleModel) =>
+                  setForm((f) => ({ ...f, vehicleMake, vehicleModel }))
+                }
+              />
+            </Field>
             <div className="grid grid-cols-2 gap-2">
               <Field label="Colour">
                 <Input
