@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { toast } from 'sonner';
 import {
   AlertTriangle,
@@ -1623,42 +1632,91 @@ function VisitTrendChart({
   rows: VisitAnalytics['trends'];
   loading: boolean;
 }) {
-  const maxVisits = Math.max(1, ...rows.map((row) => row.visits));
-  const visibleRows = rows.slice(-30);
+  const visibleRows = rows.slice(-30).map((row) => ({
+    ...row,
+    label: formatTrendDay(row.date),
+  }));
 
   return (
     <div className="p-4">
       <div
         className={cn(
-          'flex h-44 items-end gap-1.5 overflow-x-auto rounded-xl bg-muted/40 px-3 py-3',
+          'h-64 rounded-xl bg-muted/40 px-2 py-4',
           loading && 'animate-pulse',
         )}
       >
-        {visibleRows.map((row) => {
-          const height = Math.max(6, (row.visits / maxVisits) * 100);
-          return (
-            <div
-              key={row.date}
-              className="flex h-full min-w-6 flex-1 flex-col items-center justify-end gap-2"
-              title={`${row.date}: ${row.visits} visits, ${row.uniqueVisitors} unique`}
+        {visibleRows.length ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={visibleRows}
+              margin={{ top: 8, right: 16, bottom: 0, left: -16 }}
             >
-              <div className="flex w-full flex-1 items-end">
-                <div
-                  className="w-full rounded-t-md bg-bolt-600 transition-all"
-                  style={{ height: `${height}%` }}
-                />
-              </div>
-              <span className="text-[10px] font-semibold text-muted-foreground">
-                {formatTrendDay(row.date)}
-              </span>
-            </div>
-          );
-        })}
-        {!visibleRows.length && (
-          <p className="m-auto text-sm text-muted-foreground">
+              <CartesianGrid
+                stroke="hsl(var(--border))"
+                strokeDasharray="4 4"
+                vertical={false}
+              />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                minTickGap={18}
+                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+              />
+              <YAxis
+                allowDecimals={false}
+                tickLine={false}
+                axisLine={false}
+                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+              />
+              <Tooltip
+                cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
+                contentStyle={{
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: 12,
+                  background: 'hsl(var(--card))',
+                  color: 'hsl(var(--foreground))',
+                  boxShadow: '0 12px 32px hsl(var(--foreground) / 0.12)',
+                }}
+                labelFormatter={(_, payload) =>
+                  payload?.[0]?.payload?.date ?? ''
+                }
+              />
+              <Line
+                type="monotone"
+                dataKey="visits"
+                name="Visits"
+                stroke="var(--color-bolt-600)"
+                strokeWidth={3}
+                dot={false}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="uniqueVisitors"
+                name="Unique visitors"
+                stroke="var(--color-success)"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="flex h-full items-center justify-center text-sm text-muted-foreground">
             No visit trend data for this range
           </p>
         )}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-4 text-xs font-semibold text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-bolt-600" />
+          Visits
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-success" />
+          Unique visitors
+        </span>
       </div>
     </div>
   );
