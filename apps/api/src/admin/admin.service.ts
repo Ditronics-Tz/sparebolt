@@ -2,7 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ApprovalStatus, DisputeStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { buildAdminReport, reportCsv } from './reports';
+import {
+  buildAdminReport,
+  buildCustomReport,
+  customRecordPicker,
+  customReportCsv,
+  type CustomReportConfig,
+  reportCsv,
+} from './reports';
 
 @Injectable()
 export class AdminService {
@@ -72,6 +79,44 @@ export class AdminService {
   async reportCsv(period?: string, anchor?: string) {
     const report = await this.report(period, anchor);
     return reportCsv(report);
+  }
+
+  customReport(config: CustomReportConfig) {
+    return buildCustomReport(this.prisma, config);
+  }
+
+  customRecords(
+    type: string,
+    config: Pick<CustomReportConfig, 'startDate' | 'endDate' | 'filters'>,
+    page?: number,
+  ) {
+    return customRecordPicker(this.prisma, type, config, page);
+  }
+
+  async customReportCsv(config: CustomReportConfig) {
+    return customReportCsv(await this.customReport(config));
+  }
+
+  listReportTemplates(ownerId: string) {
+    return this.prisma.adminReportTemplate.findMany({
+      where: { ownerId },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  createReportTemplate(ownerId: string, name: string, config: CustomReportConfig) {
+    return this.prisma.adminReportTemplate.create({ data: { ownerId, name, config } });
+  }
+
+  updateReportTemplate(ownerId: string, id: string, name: string, config: CustomReportConfig) {
+    return this.prisma.adminReportTemplate.update({
+      where: { id, ownerId },
+      data: { name, config },
+    });
+  }
+
+  deleteReportTemplate(ownerId: string, id: string) {
+    return this.prisma.adminReportTemplate.delete({ where: { id, ownerId } });
   }
 
   async listUsers(role?: string) {

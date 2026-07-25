@@ -131,10 +131,25 @@ model User {
   pushTokens     PushToken[]
   cartSnapshot   CartSnapshot?
   visits         VisitEvent[]
+  reportTemplates AdminReportTemplate[]
 
   @@index([role])
   @@index([phone])
   @@map("users")
+}
+
+model AdminReportTemplate {
+  id        String   @id @default(cuid())
+  ownerId   String
+  name      String
+  config    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, updatedAt])
+  @@map("admin_report_templates")
 }
 
 model VisitEvent {

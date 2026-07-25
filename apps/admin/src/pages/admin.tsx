@@ -50,11 +50,13 @@ import {
   Phone,
   Printer,
   Scale,
+  Save,
   Search,
   Shield,
   Store,
   Sun,
   Truck,
+  Trash2,
   User,
   UserX,
   Users,
@@ -238,6 +240,16 @@ type VisitAnalytics = {
 };
 
 type ReportPeriod = 'day' | 'week' | 'month' | 'quarter' | 'halfYear' | 'year';
+type CustomReportType = 'orders' | 'payments' | 'escrows' | 'disputes' | 'deliveries' | 'visits';
+type CustomReportConfig = {
+  types: CustomReportType[];
+  startDate: string;
+  endDate: string;
+  filters?: { search?: string; status?: string; method?: string };
+  recordIds?: Partial<Record<CustomReportType, string[]>>;
+};
+type CustomRecord = { id: string; date: string; label: string; status: string; amount: number | null; detail: string };
+type CustomReportPreview = { startDate: string; endDate: string; sections: { type: CustomReportType; total: number; amount: number; records: CustomRecord[] }[] };
 type ReportMetric = { value: number; previous: number; change: number | null };
 type AdminReport = {
   period: {
@@ -744,7 +756,7 @@ export function AdminPage() {
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-border bg-card/95 px-4 backdrop-blur-md lg:px-6">
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card/95 px-4 backdrop-blur-md lg:px-6">
           {/* Collapse / expand sidebar */}
           <button
             type="button"
@@ -814,7 +826,7 @@ export function AdminPage() {
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-8">
+        <main className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
           {loading && !stats ? (
             <div className="admin-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {Array.from({ length: 8 }).map((_, i) => (
@@ -890,9 +902,6 @@ export function AdminPage() {
 
               {tab === 'disputes' && (
                 <section className="space-y-4">
-                  <h2 className="font-display text-lg font-bold">
-                    Disputes ({disputes.length})
-                  </h2>
                   <ul className="admin-stagger space-y-3">
                     {disputesPage.pageItems.map((d) => (
                       <li
@@ -1347,17 +1356,6 @@ function UsersPanel({
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-col gap-1">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            Accounts
-          </p>
-          <h2 className="font-display text-xl font-extrabold text-foreground lg:text-2xl">
-            System users
-          </h2>
-        </div>
-      </div>
-
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {roles.slice(1).map((item) => (
           <button
@@ -1626,6 +1624,23 @@ function ReportsPanel({
   onPeriod: (period: ReportPeriod) => void;
   onAnchor: (anchor: string) => void;
 }) {
+  const [mode, setMode] = useState<'standard' | 'custom'>('standard');
+
+  if (mode === 'custom') {
+    return (
+      <section className="space-y-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Business intelligence</p>
+            <h2 className="font-display text-xl font-extrabold text-foreground lg:text-2xl">Custom report</h2>
+          </div>
+          <ReportModeToggle mode={mode} onMode={setMode} />
+        </div>
+        <CustomReportBuilder />
+      </section>
+    );
+  }
+
   const downloadCsv = async () => {
     try {
       const response = await api.get('/admin/reports/export', {
@@ -1741,6 +1756,7 @@ function ReportsPanel({
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <ReportModeToggle mode={mode} onMode={setMode} />
           <select
             value={period}
             onChange={(event) => onPeriod(event.target.value as ReportPeriod)}
@@ -1861,6 +1877,268 @@ function ReportRow({ label, value }: { label: string; value: string }) {
   return <div className="flex items-center justify-between gap-3 py-2 text-sm"><span className="text-muted-foreground">{label}</span><strong className="text-right font-semibold text-foreground">{value}</strong></div>;
 }
 
+function ReportModeToggle({
+  mode,
+  onMode,
+}: {
+  mode: 'standard' | 'custom';
+  onMode: (mode: 'standard' | 'custom') => void;
+}) {
+  return (
+    <div className="flex gap-1 rounded-lg bg-muted p-1">
+      {(['standard', 'custom'] as const).map((value) => (
+        <button
+          key={value}
+          type="button"
+          onClick={() => onMode(value)}
+          className={cn(
+            'rounded-md px-3 py-2 text-xs font-bold capitalize transition cursor-pointer',
+            mode === value
+              ? 'bg-card text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {value === 'standard' ? 'Presets' : 'Custom'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const CUSTOM_TYPE_LABELS: Record<CustomReportType, string> = {
+  orders: 'Orders',
+  payments: 'Payments',
+  escrows: 'Escrows',
+  disputes: 'Disputes',
+  deliveries: 'Deliveries',
+  visits: 'Visits',
+};
+
+function CustomReportBuilder() {
+  const today = new Date().toISOString().slice(0, 10);
+  const [types, setTypes] = useState<CustomReportType[]>(['orders']);
+  const [activeType, setActiveType] = useState<CustomReportType>('orders');
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [method, setMethod] = useState('');
+  const [page, setPage] = useState(1);
+  const [records, setRecords] = useState<CustomRecord[]>([]);
+  const [total, setTotal] = useState(0);
+  const [selected, setSelected] = useState<Partial<Record<CustomReportType, string[]>>>({});
+  const [preview, setPreview] = useState<CustomReportPreview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [templates, setTemplates] = useState<{ id: string; name: string; config: CustomReportConfig }[]>([]);
+  const [templateName, setTemplateName] = useState('');
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+
+  const config: CustomReportConfig = {
+    types,
+    startDate,
+    endDate,
+    filters: { search, status, method },
+    recordIds: selected,
+  };
+  const selectedForType = selected[activeType] ?? [];
+  const totalPages = Math.max(1, Math.ceil(total / 10));
+
+  const loadTemplates = async () => {
+    try {
+      const response = await api.get('/admin/report-templates');
+      setTemplates(response.data ?? []);
+    } catch {
+      toast.error('Failed to load report templates');
+    }
+  };
+
+  useEffect(() => {
+    void loadTemplates();
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    void api
+      .get('/admin/reports/records', {
+        params: {
+          type: activeType,
+          startDate,
+          endDate,
+          page,
+          search: search || undefined,
+          status: status || undefined,
+          method: method || undefined,
+        },
+      })
+      .then((response) => {
+        setRecords(response.data.records ?? []);
+        setTotal(response.data.total ?? 0);
+      })
+      .catch(() => toast.error('Failed to load report records'))
+      .finally(() => setLoading(false));
+  }, [activeType, startDate, endDate, page, search, status, method]);
+
+  const toggleType = (type: CustomReportType) => {
+    if (types.includes(type)) {
+      if (types.length === 1) return;
+      const next = types.filter((item) => item !== type);
+      setTypes(next);
+      if (activeType === type) setActiveType(next[0]);
+    } else {
+      setTypes([...types, type]);
+      setActiveType(type);
+    }
+    setPage(1);
+  };
+
+  const toggleRecord = (id: string) => {
+    const current = selected[activeType] ?? [];
+    setSelected({
+      ...selected,
+      [activeType]: current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id],
+    });
+  };
+
+  const previewReport = async () => {
+    try {
+      const response = await api.post('/admin/reports/custom/preview', config);
+      setPreview(response.data);
+    } catch {
+      toast.error('Failed to build custom report');
+    }
+  };
+
+  const saveTemplate = async () => {
+    if (!templateName.trim()) {
+      toast.error('Enter a template name');
+      return;
+    }
+    try {
+      if (editingTemplateId) {
+        await api.patch(`/admin/report-templates/${editingTemplateId}`, { name: templateName.trim(), config });
+      } else {
+        await api.post('/admin/report-templates', { name: templateName.trim(), config });
+      }
+      setTemplateName('');
+      setEditingTemplateId(null);
+      await loadTemplates();
+      toast.success('Report template saved');
+    } catch {
+      toast.error('Failed to save report template');
+    }
+  };
+
+  const loadTemplate = (id: string) => {
+    const template = templates.find((item) => item.id === id);
+    if (!template) return;
+    setEditingTemplateId(template.id);
+    setTemplateName(template.name);
+    setTypes(template.config.types);
+    setActiveType(template.config.types[0] ?? 'orders');
+    setStartDate(template.config.startDate);
+    setEndDate(template.config.endDate);
+    setSearch(template.config.filters?.search ?? '');
+    setStatus(template.config.filters?.status ?? '');
+    setMethod(template.config.filters?.method ?? '');
+    setSelected(template.config.recordIds ?? {});
+    setPage(1);
+  };
+
+  const deleteTemplate = async (id: string) => {
+    try {
+      await api.post(`/admin/report-templates/${id}/delete`);
+      await loadTemplates();
+    } catch {
+      toast.error('Failed to delete report template');
+    }
+  };
+
+  const exportCsv = async () => {
+    try {
+      const response = await api.post('/admin/reports/custom/export', config, { responseType: 'text' });
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `sparebolt-custom-report-${startDate}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Failed to export custom report');
+    }
+  };
+
+  const exportPdf = () => {
+    if (!preview) return;
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+    let y = 48;
+    const line = (height = 18) => {
+      if (y > 780) {
+        pdf.addPage();
+        y = 48;
+      }
+      const current = y;
+      y += height;
+      return current;
+    };
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(18);
+    pdf.text('SpareBolt custom report', 40, line(24));
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    pdf.text(`${startDate} to ${endDate}`, 40, line(18));
+    for (const section of preview.sections) {
+      y += 10;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(13);
+      pdf.text(`${CUSTOM_TYPE_LABELS[section.type]} (${section.total})`, 40, line(20));
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      for (const row of section.records) {
+        pdf.text(`${row.date.slice(0, 10)} | ${row.label} | ${row.status} | ${row.detail}`.slice(0, 115), 40, line(15));
+      }
+    }
+    pdf.save(`sparebolt-custom-report-${startDate}.pdf`);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <div className="flex flex-wrap gap-2">
+          {(Object.keys(CUSTOM_TYPE_LABELS) as CustomReportType[]).map((type) => (
+            <button key={type} type="button" onClick={() => toggleType(type)} className={cn('rounded-lg border px-3 py-2 text-xs font-bold cursor-pointer', types.includes(type) ? 'border-bolt-500 bg-bolt-500/10 text-bolt-700 dark:text-bolt-300' : 'border-border text-muted-foreground hover:text-foreground')}>{CUSTOM_TYPE_LABELS[type]}</button>
+          ))}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <label className="text-xs font-bold text-muted-foreground">Start date<input type="date" value={startDate} onChange={(event) => { setStartDate(event.target.value); setPage(1); }} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground" /></label>
+          <label className="text-xs font-bold text-muted-foreground">End date<input type="date" value={endDate} onChange={(event) => { setEndDate(event.target.value); setPage(1); }} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground" /></label>
+          <label className="text-xs font-bold text-muted-foreground">Search<input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search" className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground" /></label>
+          <label className="text-xs font-bold text-muted-foreground">Status<input value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} placeholder="Any status" className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground" /></label>
+          <label className="text-xs font-bold text-muted-foreground">Method<input value={method} onChange={(event) => { setMethod(event.target.value); setPage(1); }} placeholder="Any method" className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground" /></label>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+          <select defaultValue="" onChange={(event) => loadTemplate(event.target.value)} className="h-9 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground"><option value="">Load saved template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select>
+          <input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="Template name" className="h-9 rounded-lg border border-border bg-background px-3 text-xs text-foreground" />
+          <Button size="sm" variant="secondary" onClick={saveTemplate}><Save className="h-4 w-4" /> {editingTemplateId ? 'Update' : 'Save'}</Button>
+          <Button size="sm" onClick={previewReport}>Preview report</Button>
+          <Button size="sm" variant="secondary" onClick={exportCsv}><Download className="h-4 w-4" /> CSV</Button>
+          <Button size="sm" variant="secondary" onClick={exportPdf} disabled={!preview}><Printer className="h-4 w-4" /> PDF</Button>
+        </div>
+        {templates.length > 0 && <div className="flex flex-wrap gap-2 text-xs text-muted-foreground"><span>Saved:</span>{templates.map((template) => <span key={template.id} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1">{template.name}<button type="button" onClick={() => deleteTemplate(template.id)} aria-label={`Delete ${template.name}`} title="Delete template" className="cursor-pointer text-muted-foreground hover:text-danger"><Trash2 className="h-3 w-3" /></button></span>)}</div>}
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">{types.map((type) => <button key={type} type="button" onClick={() => { setActiveType(type); setPage(1); }} className={cn('rounded-lg px-3 py-2 text-xs font-bold cursor-pointer', activeType === type ? 'bg-bolt-600 text-white' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>{CUSTOM_TYPE_LABELS[type]} ({selected[type]?.length ?? 0})</button>)}</div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b border-border bg-muted/70 text-[11px] font-bold uppercase tracking-wide text-muted-foreground"><tr><th className="w-12 px-4 py-3">Select</th><th className="px-4 py-3">Record</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Details</th><th className="px-4 py-3">Date</th></tr></thead><tbody className="divide-y divide-border">{records.map((row) => <tr key={row.id} className="hover:bg-muted/50"><td className="px-4 py-3"><input type="checkbox" checked={selectedForType.includes(row.id)} onChange={() => toggleRecord(row.id)} aria-label={`Select ${row.label}`} /></td><td className="px-4 py-3 font-semibold">{row.label}</td><td className="px-4 py-3">{row.status}</td><td className="px-4 py-3">{row.amount == null ? '—' : formatTZS(row.amount)}</td><td className="max-w-[20rem] truncate px-4 py-3 text-muted-foreground">{row.detail}</td><td className="px-4 py-3 text-xs text-muted-foreground">{formatRelative(row.date)}</td></tr>)}</tbody></table>{!loading && !records.length && <p className="py-10 text-center text-sm text-muted-foreground">No matching records</p>}</div>
+        <PaginationControls page={page} totalPages={totalPages} totalItems={total} onPage={setPage} />
+      </div>
+
+      {preview && <div className="space-y-4"><h3 className="font-display text-lg font-bold">Report preview</h3>{preview.sections.map((section) => <ReportSection key={section.type} title={`${CUSTOM_TYPE_LABELS[section.type]} · ${section.total} records`}><ReportRow label="Total amount" value={formatTZS(section.amount)} />{section.records.slice(0, 10).map((row) => <ReportRow key={row.id} label={row.label} value={row.amount == null ? row.status : formatTZS(row.amount)} />)}</ReportSection>)}</div>}
+    </div>
+  );
+}
+
 function VisitAnalyticsPanel({
   data,
   range,
@@ -1892,15 +2170,7 @@ function VisitAnalyticsPanel({
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            Marketplace traffic
-          </p>
-          <h2 className="font-display text-xl font-extrabold text-foreground lg:text-2xl">
-            Visits by location
-          </h2>
-        </div>
+      <div className="flex justify-end">
         <div className="flex gap-1 overflow-x-auto rounded-xl bg-muted p-1">
           {ranges.map((item) => (
             <button
@@ -2562,21 +2832,6 @@ function SellersPanel({
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-col gap-1">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            KYC · marketplace
-          </p>
-          <h2 className="font-display text-xl font-extrabold text-foreground lg:text-2xl">
-            Seller applications
-          </h2>
-          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Verify business identity, shop photos, and payout details before
-            merchants can list parts.
-          </p>
-        </div>
-      </div>
-
       <AppQueueKpis
         counts={counts}
         agingPending={agingPending}
@@ -2844,21 +3099,6 @@ function DriversPanel({
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-col gap-1">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            KYC · logistics
-          </p>
-          <h2 className="font-display text-xl font-extrabold text-foreground lg:text-2xl">
-            Driver applications
-          </h2>
-          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Confirm identity, vehicle fitness, and licence before drivers can
-            accept delivery jobs.
-          </p>
-        </div>
-      </div>
-
       <AppQueueKpis
         counts={counts}
         agingPending={agingPending}
@@ -4044,22 +4284,6 @@ function EscrowPanel({ escrows }: { escrows: EscrowRow[] }) {
 
   return (
     <section className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col gap-1">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            Trust & payments
-          </p>
-          <h2 className="font-display text-xl font-extrabold text-foreground lg:text-2xl">
-            Escrow ledger
-          </h2>
-          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Buyer payments stay locked until delivery is confirmed. Release to
-            sellers or refund buyers from dispute resolution.
-          </p>
-        </div>
-      </div>
-
       {/* KPIs */}
       <div className="admin-stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map((k) => {

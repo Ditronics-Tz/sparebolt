@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { CustomReportConfig } from './reports';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -46,6 +47,51 @@ export class AdminController {
     @Query('anchor') anchor?: string,
   ) {
     return this.admin.reportCsv(period, anchor);
+  }
+
+  @Get('reports/records')
+  records(
+    @Query('type') type: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @Query('page') page?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('method') method?: string,
+  ) {
+    return this.admin.customRecords(type, { startDate, endDate, filters: { search, status, method } }, Number(page || 1));
+  }
+
+  @Post('reports/custom/preview')
+  previewCustomReport(@Body() config: CustomReportConfig) {
+    return this.admin.customReport(config);
+  }
+
+  @Post('reports/custom/export')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="sparebolt-custom-report.csv"')
+  exportCustomReport(@Body() config: CustomReportConfig) {
+    return this.admin.customReportCsv(config);
+  }
+
+  @Get('report-templates')
+  reportTemplates(@CurrentUser('id') ownerId: string) {
+    return this.admin.listReportTemplates(ownerId);
+  }
+
+  @Post('report-templates')
+  createReportTemplate(@CurrentUser('id') ownerId: string, @Body() body: { name: string; config: CustomReportConfig }) {
+    return this.admin.createReportTemplate(ownerId, body.name, body.config);
+  }
+
+  @Patch('report-templates/:id')
+  updateReportTemplate(@CurrentUser('id') ownerId: string, @Param('id') id: string, @Body() body: { name: string; config: CustomReportConfig }) {
+    return this.admin.updateReportTemplate(ownerId, id, body.name, body.config);
+  }
+
+  @Post('report-templates/:id/delete')
+  deleteReportTemplate(@CurrentUser('id') ownerId: string, @Param('id') id: string) {
+    return this.admin.deleteReportTemplate(ownerId, id);
   }
 
   @Get('users')

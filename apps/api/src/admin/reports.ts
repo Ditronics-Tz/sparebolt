@@ -1,4 +1,5 @@
 import { PrismaService } from '../prisma/prisma.service';
+import { BadRequestException } from '@nestjs/common';
 
 export type ReportPeriod = 'day' | 'week' | 'month' | 'quarter' | 'halfYear' | 'year';
 
@@ -389,5 +390,160 @@ export function reportCsv(report: Awaited<ReturnType<typeof buildAdminReport>>) 
   }
   rows.push([], ['Date', 'Revenue', 'Orders', 'New users', 'Visits']);
   for (const row of report.series) rows.push([row.date, String(row.revenue), String(row.orders), String(row.users), String(row.visits)]);
+  return rows.map((row) => row.map(csvCell).join(',')).join('\n');
+}
+
+export const CUSTOM_REPORT_TYPES = [
+  'orders',
+  'payments',
+  'escrows',
+  'disputes',
+  'deliveries',
+  'visits',
+] as const;
+
+export type CustomReportType = (typeof CUSTOM_REPORT_TYPES)[number];
+
+export type CustomReportConfig = {
+  types: CustomReportType[];
+  startDate: string;
+  endDate: string;
+  filters?: { search?: string; status?: string; method?: string };
+  recordIds?: Partial<Record<CustomReportType, string[]>>;
+};
+
+export type CustomRecord = {
+  id: string;
+  date: string;
+  label: string;
+  status: string;
+  amount: number | null;
+  detail: string;
+};
+
+function customRange(config: Pick<CustomReportConfig, 'startDate' | 'endDate'>) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(config.startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(config.endDate)) {
+    throw new BadRequestException('Dates must use YYYY-MM-DD format');
+  }
+  const start = new Date(`${config.startDate}T00:00:00+03:00`);
+  const end = new Date(`${config.endDate}T23:59:59.999+03:00`);
+  if (start > end) throw new BadRequestException('Start date must be before end date');
+  return { start, end };
+}
+
+function validCustomTypes(types: string[]) {
+  return types.filter((type): type is CustomReportType =>
+    (CUSTOM_REPORT_TYPES as readonly string[]).includes(type),
+  );
+}
+
+function customMatch(row: CustomRecord, config: CustomReportConfig) {
+  const filters = config.filters ?? {};
+  if (filters.status && row.status !== filters.status) return false;
+  if (filters.method && !row.detail.toLowerCase().includes(filters.method.toLowerCase())) return false;
+  if (filters.search) {
+    const search = filters.search.toLowerCase();
+    if (!`${row.label} ${row.status} ${row.detail}`.toLowerCase().includes(search)) return false;
+  }
+  const selected = config.recordIds?.[config.types.find(() => true) as CustomReportType];
+  return !selected || selected.length === 0 || selected.includes(row.id);
+}
+
+async function recordsForType(
+  prisma: PrismaService,
+  type: CustomReportType,
+  range: { start: Date; end: Date },
+) : Promise<CustomRecord[]> {
+  if (type === 'orders') {
+    const rows = await prisma.order.findMany({
+      where: { createdAt: { gte: range.start, lte: range.end } },
+      select: { id: true, orderNumber: true, status: true, total: true, createdAt: true, customer: { select: { firstName: true, lastName: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 1000,
+    });
+    return rows.map((row) => ({ id: row.id, date: row.createdAt.toISOString(), label: row.orderNumber, status: row.status, amount: amount(row.total), detail: `${row.customer.firstName} ${row.customer.lastName}` }));
+  }
+  if (type === 'payments') {
+    const rows = await prisma.payment.findMany({
+      where: { createdAt: { gte: range.start, lte: range.end } },
+      select: { id: true, status: true, amount: true, method: true, createdAt: true, order: { select: { orderNumber: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 1000,
+    });
+    return rows.map((row) => ({ id: row.id, date: row.createdAt.toISOString(), label: row.order.orderNumber, status: row.status, amount: amount(row.amount), detail: row.method || 'Unknown method' }));
+  }
+  if (type === 'escrows') {
+    const rows = await prisma.escrow.findMany({
+      where: { heldAt: { gte: range.start, lte: range.end } },
+      select: { id: true, status: true, amount: true, heldAt: true, order: { select: { orderNumber: true } } },
+      orderBy: { heldAt: 'desc' },
+      take: 1000,
+    });
+    return rows.map((row) => ({ id: row.id, date: row.heldAt.toISOString(), label: row.order.orderNumber, status: row.status, amount: amount(row.amount), detail: 'Escrow transaction' }));
+  }
+  if (type === 'disputes') {
+    const rows = await prisma.dispute.findMany({
+      where: { createdAt: { gte: range.start, lte: range.end } },
+      select: { id: true, status: true, reason: true, createdAt: true, order: { select: { orderNumber: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 1000,
+    });
+    return rows.map((row) => ({ id: row.id, date: row.createdAt.toISOString(), label: row.order.orderNumber, status: row.status, amount: null, detail: row.reason }));
+  }
+  if (type === 'deliveries') {
+    const rows = await prisma.delivery.findMany({
+      where: { createdAt: { gte: range.start, lte: range.end } },
+      select: { id: true, status: true, createdAt: true, order: { select: { orderNumber: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 1000,
+    });
+    return rows.map((row) => ({ id: row.id, date: row.createdAt.toISOString(), label: row.order.orderNumber, status: row.status, amount: null, detail: 'Delivery operation' }));
+  }
+  const rows = await prisma.visitEvent.findMany({
+    where: { createdAt: { gte: range.start, lte: range.end } },
+    select: { id: true, createdAt: true, path: true, city: true, region: true, country: true },
+    orderBy: { createdAt: 'desc' },
+    take: 1000,
+  });
+  return rows.map((row) => ({ id: row.id, date: row.createdAt.toISOString(), label: row.path, status: 'VISIT', amount: null, detail: [row.city, row.region, row.country].filter(Boolean).join(', ') || 'Unknown location' }));
+}
+
+export async function customRecordPicker(
+  prisma: PrismaService,
+  typeValue: string,
+  config: Pick<CustomReportConfig, 'startDate' | 'endDate' | 'filters'>,
+  page = 1,
+) {
+  const type = validCustomTypes([typeValue])[0];
+  if (!type) throw new BadRequestException('Unsupported custom report type');
+  const rows = await recordsForType(prisma, type, customRange(config));
+  const matching = rows.filter((row) => customMatch(row, { ...config, types: [type] }));
+  const safePage = Math.max(1, Math.floor(page));
+  return { type, page: safePage, pageSize: 10, total: matching.length, records: matching.slice((safePage - 1) * 10, safePage * 10) };
+}
+
+export async function buildCustomReport(prisma: PrismaService, config: CustomReportConfig) {
+  const types = validCustomTypes(config.types);
+  if (!types.length) throw new BadRequestException('Select at least one report type');
+  const range = customRange(config);
+  const sections = [];
+  for (const type of types) {
+    const rows = await recordsForType(prisma, type, range);
+    const selectedIds = config.recordIds?.[type];
+    const matching = rows.filter((row) => {
+      if (selectedIds?.length && !selectedIds.includes(row.id)) return false;
+      return customMatch(row, { ...config, types: [type], recordIds: { [type]: selectedIds } });
+    });
+    sections.push({ type, total: matching.length, amount: matching.reduce((sum, row) => sum + (row.amount ?? 0), 0), records: matching });
+  }
+  return { startDate: config.startDate, endDate: config.endDate, sections };
+}
+
+export function customReportCsv(report: Awaited<ReturnType<typeof buildCustomReport>>) {
+  const rows: string[][] = [['SpareBolt custom report'], ['Start date', report.startDate], ['End date', report.endDate], []];
+  for (const section of report.sections) {
+    rows.push([], [section.type.toUpperCase()], ['Date', 'Record', 'Status', 'Amount', 'Details']);
+    for (const row of section.records) rows.push([row.date, row.label, row.status, row.amount == null ? '' : String(row.amount), row.detail]);
+  }
   return rows.map((row) => row.map(csvCell).join(',')).join('\n');
 }
