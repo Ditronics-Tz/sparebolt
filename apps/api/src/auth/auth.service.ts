@@ -276,6 +276,14 @@ export class AuthService {
       body: 'Your documents are under review. You can list parts after approval.',
     });
 
+    // Alert admins so the KYC queue is actioned promptly (in-app + push).
+    void this.notifications.notifyAdmins({
+      type: 'APPROVAL',
+      title: 'New seller application',
+      body: `${dto.businessName} submitted seller KYC and is awaiting review.`,
+      data: { kind: 'seller_application', sellerId: profile.id },
+    });
+
     return {
       ...profile,
       message:
@@ -373,6 +381,14 @@ export class AuthService {
       type: 'APPROVAL',
       title: 'Driver application received',
       body: 'Your documents are under review. You can accept jobs after approval.',
+    });
+
+    // Alert admins so the KYC queue is actioned promptly (in-app + push).
+    void this.notifications.notifyAdmins({
+      type: 'APPROVAL',
+      title: 'New driver application',
+      body: `${dto.legalFullName || 'A new driver'} submitted driver KYC and is awaiting review.`,
+      data: { kind: 'driver_application', driverId: profile.id },
     });
 
     return {

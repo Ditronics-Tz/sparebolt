@@ -49,6 +49,7 @@ import { Input } from '@sparebolt/shared/ui/input';
 import { SafeImage } from '@sparebolt/shared/safe-image';
 import { useAuthStore } from '@sparebolt/shared/auth-store';
 import { useTheme } from '@sparebolt/shared/use-theme';
+import { registerAdminWebPush } from '@/lib/push';
 
 type TabId = 'overview' | 'sellers' | 'drivers' | 'disputes' | 'escrows';
 
@@ -284,6 +285,11 @@ export function AdminPage() {
 
   useEffect(() => {
     void loadAll();
+  }, []);
+
+  // Enable FCM web push for this admin (prompts once, then no-ops).
+  useEffect(() => {
+    void registerAdminWebPush();
   }, []);
 
   // Close user menus on outside click
@@ -585,17 +591,7 @@ export function AdminPage() {
 
           {/* Right: plain icons (no container borders) */}
           <div className="flex items-center gap-0.5 sm:gap-1">
-            <button
-              type="button"
-              className="relative flex h-10 w-10 items-center justify-center text-muted-foreground transition-all duration-200 hover:text-foreground hover:scale-105 active:scale-95 cursor-pointer"
-              aria-label="Notifications"
-              onClick={() => toast.message('No new admin notifications')}
-            >
-              <Bell className="h-5 w-5" />
-              {(stats?.needsAttention ?? 0) > 0 && (
-                <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-danger admin-badge-pop" />
-              )}
-            </button>
+            <AdminNotifications />
 
             <button
               type="button"
@@ -2130,6 +2126,162 @@ function Empty({ title, body }: { title: string; body: string }) {
     <div className="rounded-2xl border border-dashed border-border bg-card py-14 text-center">
       <p className="font-semibold text-foreground/90">{title}</p>
       <p className="mt-1 text-sm text-muted-foreground">{body}</p>
+    </div>
+  );
+}
+
+type AdminNotification = {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  data?: Record<string, unknown> | null;
+  read: boolean;
+  createdAt: string;
+};
+
+/**
+ * Header notification centre — polls the admin's notification feed, shows an
+ * unread badge, and lets the admin open the dropdown to read / clear items.
+ */
+function AdminNotifications() {
+  const [items, setItems] = useState<AdminNotification[]>([]);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const load = async () => {
+    try {
+      const { data } = await api.get<AdminNotification[]>('/notifications');
+      setItems(Array.isArray(data) ? data : []);
+    } catch {
+      /* keep last known list on transient errors */
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    const id = window.setInterval(() => void load(), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const unread = items.filter((n) => !n.read).length;
+
+  const markAll = async () => {
+    if (!unread) return;
+    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+    try {
+      await api.post('/notifications/read-all');
+    } catch {
+      void load();
+    }
+  };
+
+  const openItem = async (n: AdminNotification) => {
+    if (n.read) return;
+    setItems((prev) =>
+      prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)),
+    );
+    try {
+      await api.patch(`/notifications/${n.id}/read`);
+    } catch {
+      /* optimistic update stands; next poll reconciles */
+    }
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        className="relative flex h-10 w-10 items-center justify-center text-muted-foreground transition-all duration-200 hover:text-foreground hover:scale-105 active:scale-95 cursor-pointer"
+        aria-label="Notifications"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Bell className="h-5 w-5" />
+        {unread > 0 && (
+          <span className="admin-badge-pop absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">
+            {unread > 9 ? '9+' : unread}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl admin-menu-in origin-top-right"
+        >
+          <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <p className="font-display text-sm font-bold">Notifications</p>
+            {unread > 0 && (
+              <button
+                type="button"
+                className="cursor-pointer text-xs font-semibold text-bolt-700 hover:underline dark:text-bolt-300"
+                onClick={() => void markAll()}
+              >
+                Mark all read
+              </button>
+            )}
+          </div>
+          <div className="max-h-96 overflow-y-auto">
+            {items.length === 0 ? (
+              <div className="px-4 py-10 text-center">
+                <Bell className="mx-auto h-8 w-8 text-muted-foreground/40" />
+                <p className="mt-2 text-sm font-semibold text-foreground/90">
+                  You&rsquo;re all caught up
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  New applications and alerts show up here.
+                </p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {items.map((n) => (
+                  <li key={n.id}>
+                    <button
+                      type="button"
+                      onClick={() => void openItem(n)}
+                      className={cn(
+                        'flex w-full items-start gap-2.5 px-4 py-3 text-left transition hover:bg-muted cursor-pointer',
+                        !n.read && 'bg-accent-soft/40',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'mt-1.5 h-2 w-2 shrink-0 rounded-full',
+                          n.read ? 'bg-transparent' : 'bg-bolt-500',
+                        )}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-foreground">
+                          {n.title}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground line-clamp-2">
+                          {n.body}
+                        </span>
+                        <span className="mt-1 block text-[11px] text-muted-foreground">
+                          {formatRelative(n.createdAt)}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

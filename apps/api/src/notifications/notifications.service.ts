@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { NotificationType, Prisma } from '@prisma/client';
+import { NotificationType, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { FirebaseService } from './firebase.service';
 
@@ -92,6 +92,27 @@ export class NotificationsService {
     });
 
     return notification;
+  }
+
+  /**
+   * Fan a notification out to every active admin (in-app row + FCM push each).
+   * Self-contained error handling so callers can fire-and-forget without
+   * risking the originating request (e.g. a seller/driver registration).
+   */
+  async notifyAdmins(payload: NotifyPayload) {
+    try {
+      const admins = await this.prisma.user.findMany({
+        where: { role: Role.ADMIN, isActive: true },
+        select: { id: true },
+      });
+      await Promise.all(admins.map((a) => this.notify(a.id, payload)));
+      return admins.length;
+    } catch (err) {
+      this.logger.error(
+        `notifyAdmins failed: ${err instanceof Error ? err.message : err}`,
+      );
+      return 0;
+    }
   }
 
   /**
