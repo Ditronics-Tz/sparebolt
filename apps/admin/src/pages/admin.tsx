@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { DashboardSquare01Icon } from '@hugeicons/core-free-icons';
+import {
+  AddTeamIcon,
+  DashboardSquare01Icon,
+} from '@hugeicons/core-free-icons';
 import {
   CartesianGrid,
   Line,
@@ -242,6 +245,18 @@ function OverviewIcon({ className }: { className?: string }) {
   );
 }
 
+function SellersIcon({ className }: { className?: string }) {
+  return (
+    <HugeiconsIcon
+      icon={AddTeamIcon}
+      size={24}
+      color="currentColor"
+      strokeWidth={1.5}
+      className={className}
+    />
+  );
+}
+
 type NavIcon = typeof LayoutDashboard | typeof OverviewIcon;
 
 const NAV: {
@@ -252,7 +267,7 @@ const NAV: {
   { id: 'overview', label: 'Overview', icon: OverviewIcon },
   { id: 'users', label: 'Users', icon: Users },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-  { id: 'sellers', label: 'Sellers', icon: Store },
+  { id: 'sellers', label: 'Sellers', icon: SellersIcon },
   { id: 'drivers', label: 'Drivers', icon: Truck },
   { id: 'disputes', label: 'Disputes', icon: Scale },
   { id: 'escrows', label: 'Escrows', icon: Wallet },
