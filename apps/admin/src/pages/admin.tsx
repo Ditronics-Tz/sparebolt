@@ -511,7 +511,7 @@ export function AdminPage() {
   };
 
   return (
-    <div className="flex min-h-dvh bg-background">
+    <div className="flex h-dvh overflow-hidden bg-background">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <button
@@ -525,7 +525,7 @@ export function AdminPage() {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300 ease-out lg:static lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 flex h-dvh max-h-dvh flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300 ease-out lg:sticky lg:top-0 lg:translate-x-0',
           sidebarCollapsed ? 'lg:w-[4.5rem]' : 'lg:w-64',
           'w-64',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full',
@@ -552,7 +552,7 @@ export function AdminPage() {
           )}
         </div>
 
-        <nav className={cn('flex-1 space-y-1 p-3', sidebarCollapsed && 'px-2')}>
+        <nav className={cn('min-h-0 flex-1 overflow-hidden space-y-1 p-3', sidebarCollapsed && 'px-2')}>
           {NAV.map(({ id, label, icon: Icon }) => {
             const count = badgeFor(id);
             const active = tab === id;
@@ -741,7 +741,7 @@ export function AdminPage() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 lg:p-8">
+        <main className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-8">
           {loading && !stats ? (
             <div className="admin-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {Array.from({ length: 8 }).map((_, i) => (
