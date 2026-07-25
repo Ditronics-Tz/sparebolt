@@ -1,5 +1,13 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { useEffect } from 'react';
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from 'react-router-dom';
 import { Toaster } from 'sonner';
+import { api } from '@sparebolt/shared/api';
 import { AppShell } from '@/components/layout/app-shell';
 import { ProtectedRoute } from '@/components/layout/protected-route';
 import { useTheme } from '@/hooks/use-theme';
@@ -33,10 +41,31 @@ function ThemedToaster() {
   );
 }
 
+const trackedRouteKeys = new Set<string>();
+
+function VisitTracker() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const path = `${location.pathname}${location.search}`;
+    const key = `${location.key}:${path}`;
+    if (trackedRouteKeys.has(key)) return;
+    trackedRouteKeys.add(key);
+
+    void api.post('/analytics/visit', {
+      path,
+      referrer: document.referrer || null,
+    }).catch(() => undefined);
+  }, [location.key, location.pathname, location.search]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <ThemedToaster />
+      <VisitTracker />
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<HomePage />} />

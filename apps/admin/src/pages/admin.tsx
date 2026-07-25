@@ -6,8 +6,10 @@ import {
   AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
+  Activity,
   BadgeCheck,
   Banknote,
+  BarChart3,
   Bell,
   Bolt,
   Building2,
@@ -19,6 +21,7 @@ import {
   ExternalLink,
   Eye,
   FileCheck,
+  Globe2,
   IdCard,
   LayoutDashboard,
   LogOut,
@@ -51,7 +54,14 @@ import { useAuthStore } from '@sparebolt/shared/auth-store';
 import { useTheme } from '@sparebolt/shared/use-theme';
 import { registerAdminWebPush } from '@/lib/push';
 
-type TabId = 'overview' | 'sellers' | 'drivers' | 'disputes' | 'escrows';
+type TabId =
+  | 'overview'
+  | 'users'
+  | 'analytics'
+  | 'sellers'
+  | 'drivers'
+  | 'disputes'
+  | 'escrows';
 
 type Stats = {
   users: number;
@@ -157,12 +167,61 @@ type DriverRow = {
   };
 };
 
+type AdminUserRow = {
+  id: string;
+  email?: string | null;
+  phone?: string | null;
+  firstName: string;
+  lastName: string;
+  role: 'CUSTOMER' | 'SELLER' | 'DRIVER' | 'ADMIN';
+  isActive: boolean;
+  createdAt?: string;
+  sellerProfile?: { id: string; status: string; businessName?: string } | null;
+  driverProfile?: {
+    id: string;
+    status: string;
+    vehiclePlate?: string;
+  } | null;
+};
+
+type VisitRange = '7d' | '30d' | '90d';
+
+type VisitAnalytics = {
+  range: VisitRange;
+  totalVisits: number;
+  uniqueVisitors: number;
+  topPaths: { path: string; visits: number }[];
+  topLocations: {
+    country: string;
+    region?: string | null;
+    city?: string | null;
+    visits: number;
+  }[];
+  recentVisits: {
+    id: string;
+    path: string;
+    referrer?: string | null;
+    country?: string | null;
+    region?: string | null;
+    city?: string | null;
+    createdAt: string;
+    user?: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      role: string;
+    } | null;
+  }[];
+};
+
 const NAV: {
   id: TabId;
   label: string;
   icon: typeof LayoutDashboard;
 }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'users', label: 'Users', icon: Users },
+  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'sellers', label: 'Sellers', icon: Store },
   { id: 'drivers', label: 'Drivers', icon: Truck },
   { id: 'disputes', label: 'Disputes', icon: Scale },
@@ -236,6 +295,10 @@ export function AdminPage() {
       customer: { firstName: string; lastName: string };
     }[]
   >([]);
+  const [users, setUsers] = useState<AdminUserRow[]>([]);
+  const [analytics, setAnalytics] = useState<VisitAnalytics | null>(null);
+  const [analyticsRange, setAnalyticsRange] = useState<VisitRange>('30d');
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [sellers, setSellers] = useState<SellerRow[]>([]);
   const [drivers, setDrivers] = useState<DriverRow[]>([]);
   const [disputes, setDisputes] = useState<
@@ -261,9 +324,10 @@ export function AdminPage() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [dash, sellersRes, driversRes, disputesRes, escrowsRes] =
+      const [dash, usersRes, sellersRes, driversRes, disputesRes, escrowsRes] =
         await Promise.all([
           api.get('/admin/dashboard'),
+          api.get('/admin/users'),
           api.get('/admin/sellers'),
           api.get('/admin/drivers'),
           api.get('/admin/disputes'),
@@ -271,6 +335,7 @@ export function AdminPage() {
         ]);
       setStats(dash.data.stats);
       setRecentOrders(dash.data.recentOrders ?? []);
+      setUsers(usersRes.data ?? []);
       setSellers(sellersRes.data ?? []);
       setDrivers(driversRes.data ?? []);
       setDisputes(disputesRes.data ?? []);
@@ -285,6 +350,24 @@ export function AdminPage() {
   useEffect(() => {
     void loadAll();
   }, []);
+
+  const loadAnalytics = async (range: VisitRange) => {
+    setAnalyticsLoading(true);
+    try {
+      const res = await api.get('/admin/analytics/visits', {
+        params: { range },
+      });
+      setAnalytics(res.data);
+    } catch {
+      toast.error('Failed to load visit analytics');
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadAnalytics(analyticsRange);
+  }, [analyticsRange]);
 
   // Enable FCM web push for this admin (prompts once, then no-ops).
   useEffect(() => {
@@ -370,6 +453,19 @@ export function AdminPage() {
       await loadAll();
     } catch {
       toast.error('Failed to resolve');
+    }
+  };
+
+  const setUserActive = async (row: AdminUserRow, isActive: boolean) => {
+    setActionLoading(true);
+    try {
+      await api.patch(`/admin/users/${row.id}/active`, { isActive });
+      toast.success(`${row.firstName} ${isActive ? 'activated' : 'deactivated'}`);
+      await loadAll();
+    } catch {
+      toast.error('Failed to update user');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -650,6 +746,35 @@ export function AdminPage() {
                 />
               )}
 
+              {tab === 'users' && (
+                <UsersPanel
+                  users={users}
+                  loading={actionLoading}
+                  onSetActive={(row, isActive) =>
+                    setConfirm({
+                      title: `${isActive ? 'Activate' : 'Deactivate'} user?`,
+                      message: `${row.firstName} ${row.lastName} will ${
+                        isActive
+                          ? 'regain access to the system'
+                          : 'lose access to sign in and use protected features'
+                      }.`,
+                      confirmLabel: isActive ? 'Activate' : 'Deactivate',
+                      tone: isActive ? 'success' : 'danger',
+                      onConfirm: () => setUserActive(row, isActive),
+                    })
+                  }
+                />
+              )}
+
+              {tab === 'analytics' && (
+                <VisitAnalyticsPanel
+                  data={analytics}
+                  range={analyticsRange}
+                  loading={analyticsLoading}
+                  onRange={setAnalyticsRange}
+                />
+              )}
+
               {tab === 'sellers' && (
                 <SellersPanel
                   sellers={sellers}
@@ -823,6 +948,7 @@ function Overview({
       value: stats.users,
       icon: Users,
       tone: 'bg-info-soft text-info-soft-foreground',
+      onClick: () => onJump('users'),
     },
     {
       label: 'Approved sellers',
@@ -968,6 +1094,555 @@ function Overview({
       </div>
     </div>
   );
+}
+
+// ─── Users and visit analytics ──────────────────────────────────────────────
+
+type UserRoleFilter = 'ALL' | AdminUserRow['role'];
+type UserStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
+
+function userFullName(row: AdminUserRow) {
+  return `${row.firstName} ${row.lastName}`.trim() || 'Unnamed user';
+}
+
+function UsersPanel({
+  users,
+  loading,
+  onSetActive,
+}: {
+  users: AdminUserRow[];
+  loading: boolean;
+  onSetActive: (row: AdminUserRow, isActive: boolean) => void;
+}) {
+  const [role, setRole] = useState<UserRoleFilter>('ALL');
+  const [status, setStatus] = useState<UserStatusFilter>('ALL');
+  const [search, setSearch] = useState('');
+
+  const roleCounts = useMemo(() => {
+    const counts: Record<UserRoleFilter, number> = {
+      ALL: users.length,
+      CUSTOMER: 0,
+      SELLER: 0,
+      DRIVER: 0,
+      ADMIN: 0,
+    };
+    for (const row of users) counts[row.role] += 1;
+    return counts;
+  }, [users]);
+
+  const activeCount = useMemo(
+    () => users.filter((row) => row.isActive).length,
+    [users],
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return users.filter((row) => {
+      if (role !== 'ALL' && row.role !== role) return false;
+      if (status === 'ACTIVE' && !row.isActive) return false;
+      if (status === 'INACTIVE' && row.isActive) return false;
+      if (!q) return true;
+      const hay = [
+        userFullName(row),
+        row.email,
+        row.phone,
+        row.role,
+        row.sellerProfile?.businessName,
+        row.sellerProfile?.status,
+        row.driverProfile?.vehiclePlate,
+        row.driverProfile?.status,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [users, role, status, search]);
+
+  const roles: { id: UserRoleFilter; label: string }[] = [
+    { id: 'ALL', label: 'All' },
+    { id: 'CUSTOMER', label: 'Customers' },
+    { id: 'SELLER', label: 'Sellers' },
+    { id: 'DRIVER', label: 'Drivers' },
+    { id: 'ADMIN', label: 'Admins' },
+  ];
+  const statuses: { id: UserStatusFilter; label: string; count: number }[] = [
+    { id: 'ALL', label: 'All status', count: users.length },
+    { id: 'ACTIVE', label: 'Active', count: activeCount },
+    { id: 'INACTIVE', label: 'Inactive', count: users.length - activeCount },
+  ];
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Accounts
+          </p>
+          <h2 className="font-display text-xl font-extrabold text-foreground lg:text-2xl">
+            System users
+          </h2>
+        </div>
+        <div className="rounded-xl border border-border bg-card px-3 py-2 text-right shadow-sm">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+            Active users
+          </p>
+          <p className="font-display text-lg font-extrabold tabular-nums">
+            {activeCount}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            {users.length - activeCount} inactive
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {roles.slice(1).map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setRole(item.id)}
+            className={cn(
+              'rounded-2xl border border-border bg-card p-4 text-left shadow-sm transition-all duration-200 hover:shadow-md cursor-pointer',
+              role === item.id && 'border-bolt-400 ring-2 ring-bolt-500/20',
+            )}
+          >
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              {item.label}
+            </p>
+            <p className="mt-2 font-display text-2xl font-extrabold tabular-nums">
+              {roleCounts[item.id]}
+            </p>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name, phone, email, role, profile…"
+            className="pl-10"
+          />
+        </div>
+        <div className="flex gap-1 overflow-x-auto rounded-xl bg-muted p-1">
+          {roles.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setRole(item.id)}
+              className={cn(
+                'inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold cursor-pointer min-h-[36px] transition',
+                role === item.id
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {item.label}
+              <span className="rounded-md bg-background/60 px-1.5 py-0.5 text-[10px] tabular-nums">
+                {roleCounts[item.id]}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1 overflow-x-auto rounded-xl bg-muted p-1">
+          {statuses.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setStatus(item.id)}
+              className={cn(
+                'inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold cursor-pointer min-h-[36px] transition',
+                status === item.id
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {item.label}
+              <span className="rounded-md bg-background/60 px-1.5 py-0.5 text-[10px] tabular-nums">
+                {item.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="hidden overflow-hidden rounded-2xl border border-border bg-card shadow-sm lg:block">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[920px] text-left text-sm">
+            <thead className="border-b border-border bg-muted/70 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3">User</th>
+                <th className="px-4 py-3">Contact</th>
+                <th className="px-4 py-3">Role</th>
+                <th className="px-4 py-3">Profiles</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Joined</th>
+                <th className="px-4 py-3 text-right"> </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filtered.map((row) => (
+                <tr key={row.id} className="hover:bg-muted/60">
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <UserAvatar name={userFullName(row)} size="sm" />
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-foreground">
+                          {userFullName(row)}
+                        </p>
+                        <p className="font-mono text-[11px] text-muted-foreground">
+                          {row.id}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3.5 text-xs text-muted-foreground">
+                    <p className="font-semibold text-foreground/90">
+                      {row.phone || 'No phone'}
+                    </p>
+                    <p>{row.email || 'No email'}</p>
+                  </td>
+                  <td className="px-4 py-3.5">{statusBadge(row.role)}</td>
+                  <td className="px-4 py-3.5">
+                    <UserProfileBadges row={row} />
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <Badge variant={row.isActive ? 'success' : 'danger'}>
+                      {row.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3.5 text-xs text-muted-foreground">
+                    {row.createdAt ? formatRelative(row.createdAt) : '—'}
+                  </td>
+                  <td className="px-4 py-3.5 text-right">
+                    <Button
+                      size="sm"
+                      variant={row.isActive ? 'secondary' : 'default'}
+                      disabled={loading}
+                      onClick={() => onSetActive(row, !row.isActive)}
+                    >
+                      {row.isActive ? 'Deactivate' : 'Activate'}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!filtered.length && (
+          <div className="py-16 text-center">
+            <Users className="mx-auto h-10 w-10 text-muted-foreground/50" />
+            <p className="mt-3 font-semibold text-foreground">
+              No matching users
+            </p>
+          </div>
+        )}
+      </div>
+
+      <ul className="space-y-3 lg:hidden">
+        {filtered.map((row) => (
+          <li
+            key={row.id}
+            className="rounded-2xl border border-border bg-card p-4 shadow-sm"
+          >
+            <div className="flex items-start gap-3">
+              <UserAvatar name={userFullName(row)} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-foreground">
+                      {userFullName(row)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {row.phone || row.email || 'No contact'}
+                    </p>
+                  </div>
+                  <Badge variant={row.isActive ? 'success' : 'danger'}>
+                    {row.isActive ? 'Active' : 'Inactive'}
+                  </Badge>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {statusBadge(row.role)}
+                  <UserProfileBadges row={row} />
+                </div>
+                <Button
+                  size="sm"
+                  variant={row.isActive ? 'secondary' : 'default'}
+                  className="mt-3 w-full"
+                  disabled={loading}
+                  onClick={() => onSetActive(row, !row.isActive)}
+                >
+                  {row.isActive ? 'Deactivate' : 'Activate'}
+                </Button>
+              </div>
+            </div>
+          </li>
+        ))}
+        {!filtered.length && <Empty title="No matching users" body=" " />}
+      </ul>
+    </section>
+  );
+}
+
+function UserProfileBadges({ row }: { row: AdminUserRow }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {row.sellerProfile && (
+        <Badge variant="muted">Seller {row.sellerProfile.status}</Badge>
+      )}
+      {row.driverProfile && (
+        <Badge variant="muted">Driver {row.driverProfile.status}</Badge>
+      )}
+      {!row.sellerProfile && !row.driverProfile && (
+        <span className="text-xs text-muted-foreground">—</span>
+      )}
+    </div>
+  );
+}
+
+function VisitAnalyticsPanel({
+  data,
+  range,
+  loading,
+  onRange,
+}: {
+  data: VisitAnalytics | null;
+  range: VisitRange;
+  loading: boolean;
+  onRange: (range: VisitRange) => void;
+}) {
+  const ranges: { id: VisitRange; label: string }[] = [
+    { id: '7d', label: '7 days' },
+    { id: '30d', label: '30 days' },
+    { id: '90d', label: '90 days' },
+  ];
+  const topLocation = data?.topLocations[0];
+  const topPath = data?.topPaths[0];
+  const maxLocationVisits = Math.max(
+    1,
+    ...(data?.topLocations.map((row) => row.visits) ?? [1]),
+  );
+  const maxPathVisits = Math.max(
+    1,
+    ...(data?.topPaths.map((row) => row.visits) ?? [1]),
+  );
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Marketplace traffic
+          </p>
+          <h2 className="font-display text-xl font-extrabold text-foreground lg:text-2xl">
+            Visits by location
+          </h2>
+        </div>
+        <div className="flex gap-1 overflow-x-auto rounded-xl bg-muted p-1">
+          {ranges.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onRange(item.id)}
+              className={cn(
+                'inline-flex shrink-0 items-center rounded-lg px-3 py-2 text-xs font-bold cursor-pointer min-h-[36px] transition',
+                range === item.id
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <AnalyticsKpi
+          label="Total visits"
+          value={data?.totalVisits ?? 0}
+          icon={Activity}
+          loading={loading}
+        />
+        <AnalyticsKpi
+          label="Unique visitors"
+          value={data?.uniqueVisitors ?? 0}
+          icon={Users}
+          loading={loading}
+        />
+        <AnalyticsKpi
+          label="Top location"
+          value={topLocation ? locationLabel(topLocation) : '—'}
+          icon={Globe2}
+          loading={loading}
+        />
+        <AnalyticsKpi
+          label="Top page"
+          value={topPath?.path ?? '—'}
+          icon={ExternalLink}
+          loading={loading}
+        />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <div className="rounded-2xl border border-border bg-card shadow-sm">
+          <div className="border-b border-border px-4 py-3">
+            <h3 className="font-display font-bold">Locations</h3>
+          </div>
+          <div className="space-y-3 p-4">
+            {data?.topLocations.map((row) => (
+              <div key={locationLabel(row)} className="space-y-1.5">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <p className="min-w-0 truncate font-semibold">
+                    {locationLabel(row)}
+                  </p>
+                  <p className="font-mono text-xs text-muted-foreground">
+                    {row.visits}
+                  </p>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-bolt-600"
+                    style={{
+                      width: `${Math.max(4, (row.visits / maxLocationVisits) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+            {!data?.topLocations.length && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No visits recorded for this range
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card shadow-sm">
+          <div className="border-b border-border px-4 py-3">
+            <h3 className="font-display font-bold">Pages</h3>
+          </div>
+          <div className="space-y-3 p-4">
+            {data?.topPaths.map((row) => (
+              <div key={row.path} className="space-y-1.5">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <p className="min-w-0 truncate font-mono text-xs">
+                    {row.path}
+                  </p>
+                  <p className="font-mono text-xs text-muted-foreground">
+                    {row.visits}
+                  </p>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-emerald-600"
+                    style={{
+                      width: `${Math.max(4, (row.visits / maxPathVisits) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+            {!data?.topPaths.length && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No page visits recorded for this range
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+        <div className="border-b border-border px-4 py-3">
+          <h3 className="font-display font-bold">Recent visits</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="border-b border-border bg-muted/70 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3">Path</th>
+                <th className="px-4 py-3">Visitor</th>
+                <th className="px-4 py-3">Location</th>
+                <th className="px-4 py-3">Referrer</th>
+                <th className="px-4 py-3">When</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {data?.recentVisits.map((visit) => (
+                <tr key={visit.id} className="hover:bg-muted/60">
+                  <td className="px-4 py-3 font-mono text-xs">{visit.path}</td>
+                  <td className="px-4 py-3">
+                    {visit.user
+                      ? `${visit.user.firstName} ${visit.user.lastName}`
+                      : 'Anonymous'}
+                  </td>
+                  <td className="px-4 py-3">{locationLabel(visit)}</td>
+                  <td className="max-w-[14rem] truncate px-4 py-3 text-xs text-muted-foreground">
+                    {visit.referrer || '—'}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    {formatRelative(visit.createdAt)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!data?.recentVisits.length && (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              No recent visits
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AnalyticsKpi({
+  label,
+  value,
+  icon: Icon,
+  loading,
+}: {
+  label: string;
+  value: string | number;
+  icon: typeof LayoutDashboard;
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-info-soft text-info-soft-foreground">
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <p
+        className={cn(
+          'mt-2 truncate font-display text-2xl font-extrabold tabular-nums text-foreground',
+          loading && 'animate-pulse text-muted-foreground',
+        )}
+        title={String(value)}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function locationLabel(row: {
+  country?: string | null;
+  region?: string | null;
+  city?: string | null;
+}) {
+  return [row.city, row.region, row.country || 'Unknown']
+    .filter(Boolean)
+    .join(', ');
 }
 
 // ─── KYC application queues (sellers / drivers) ─────────────────────────────

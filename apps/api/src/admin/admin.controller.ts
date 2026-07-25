@@ -26,6 +26,11 @@ export class AdminController {
     return this.admin.dashboard();
   }
 
+  @Get('analytics/visits')
+  visitAnalytics(@Query('range') range?: string) {
+    return this.admin.visitAnalytics(range);
+  }
+
   @Get('users')
   users(@Query('role') role?: string) {
     return this.admin.listUsers(role);

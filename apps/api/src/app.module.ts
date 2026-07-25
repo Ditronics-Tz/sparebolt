@@ -14,6 +14,7 @@ import { AdsModule } from './ads/ads.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { LocationsModule } from './locations/locations.module';
 import { CartModule } from './cart/cart.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -34,6 +35,7 @@ import { AppService } from './app.service';
     UploadsModule,
     LocationsModule,
     CartModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

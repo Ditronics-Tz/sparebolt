@@ -84,6 +84,75 @@ export class AdminService {
     });
   }
 
+  async visitAnalytics(range = '30d') {
+    const days = range === '7d' ? 7 : range === '90d' ? 90 : 30;
+    const since = new Date(Date.now() - days * 86_400_000);
+    const where = { createdAt: { gte: since } };
+
+    const [totalVisits, uniqueRows, topPaths, topLocations, recentVisits] =
+      await Promise.all([
+        this.prisma.visitEvent.count({ where }),
+        this.prisma.visitEvent.findMany({
+          where: { ...where, ipHash: { not: null } },
+          distinct: ['ipHash'],
+          select: { ipHash: true },
+        }),
+        this.prisma.visitEvent.groupBy({
+          by: ['path'],
+          where,
+          _count: { _all: true },
+          orderBy: { _count: { path: 'desc' } },
+          take: 10,
+        }),
+        this.prisma.visitEvent.groupBy({
+          by: ['country', 'region', 'city'],
+          where,
+          _count: { _all: true },
+          orderBy: { _count: { country: 'desc' } },
+          take: 10,
+        }),
+        this.prisma.visitEvent.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          take: 25,
+          select: {
+            id: true,
+            path: true,
+            referrer: true,
+            country: true,
+            region: true,
+            city: true,
+            createdAt: true,
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                role: true,
+              },
+            },
+          },
+        }),
+      ]);
+
+    return {
+      range: `${days}d`,
+      totalVisits,
+      uniqueVisitors: uniqueRows.length,
+      topPaths: topPaths.map((row) => ({
+        path: row.path,
+        visits: row._count._all,
+      })),
+      topLocations: topLocations.map((row) => ({
+        country: row.country || 'Unknown',
+        region: row.region,
+        city: row.city,
+        visits: row._count._all,
+      })),
+      recentVisits,
+    };
+  }
+
   async setUserActive(userId: string, isActive: boolean) {
     return this.prisma.user.update({
       where: { id: userId },

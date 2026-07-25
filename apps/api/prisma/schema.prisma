@@ -130,10 +130,31 @@ model User {
   otpCodes       OtpCode[]
   pushTokens     PushToken[]
   cartSnapshot   CartSnapshot?
+  visits         VisitEvent[]
 
   @@index([role])
   @@index([phone])
   @@map("users")
+}
+
+model VisitEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  path      String
+  referrer  String?
+  userAgent String?
+  ipHash    String?
+  country   String?
+  region    String?
+  city      String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([country, region, city])
+  @@index([userId, createdAt])
+  @@map("visit_events")
 }
 
 model OtpCode {
