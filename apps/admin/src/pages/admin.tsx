@@ -243,17 +243,18 @@ type VisitAnalytics = {
 type ReportPeriod = 'day' | 'week' | 'month' | 'quarter' | 'halfYear' | 'year';
 type CustomReportType = 'orders' | 'payments' | 'escrows' | 'disputes' | 'deliveries' | 'visits';
 type CustomReportFieldGroup = CustomReportType | 'customers' | 'sellers' | 'drivers';
+type CustomReportEntity = CustomReportFieldGroup;
 type CustomReportColumn = { key: string; label: string };
 type CustomReportConfig = {
-  types: CustomReportType[];
+  entities: CustomReportEntity[];
   startDate: string;
   endDate: string;
-  filters?: { search?: string; status?: string; method?: string };
-  recordIds?: Partial<Record<CustomReportType, string[]>>;
+  filters?: { entity?: CustomReportEntity; search?: string; status?: string; method?: string };
   fields?: Partial<Record<CustomReportFieldGroup, string[]>>;
+  types?: CustomReportType[];
 };
 type CustomRecord = { id: string; date: string; label: string; status: string; amount: number | null; detail: string; cells: Record<string, string> };
-type CustomReportPreview = { startDate: string; endDate: string; sections: { type: CustomReportType; total: number; amount: number; columns: CustomReportColumn[]; records: CustomRecord[] }[] };
+type CustomReportPreview = { startDate: string; endDate: string; entities: CustomReportEntity[]; total: number; amount: number; columns: CustomReportColumn[]; rows: CustomRecord[] };
 type ReportMetric = { value: number; previous: number; change: number | null };
 type AdminReport = {
   period: {
@@ -1961,28 +1962,28 @@ const CUSTOM_FIELD_OPTIONS: Record<CustomReportFieldGroup, CustomReportColumn[]>
     { key: 'deliveredDate', label: 'Delivered date' },
   ],
   payments: [
-    { key: 'date', label: 'Date' },
-    { key: 'record', label: 'Record' },
-    { key: 'status', label: 'Status' },
-    { key: 'amount', label: 'Amount' },
-    { key: 'method', label: 'Method' },
+    { key: 'paymentDate', label: 'Payment date' },
+    { key: 'paymentId', label: 'Payment ID' },
+    { key: 'paymentStatus', label: 'Payment status' },
+    { key: 'paymentAmount', label: 'Payment amount' },
+    { key: 'paymentMethod', label: 'Payment method' },
   ],
   escrows: [
-    { key: 'date', label: 'Date' },
-    { key: 'record', label: 'Record' },
-    { key: 'status', label: 'Status' },
-    { key: 'amount', label: 'Amount' },
+    { key: 'escrowDate', label: 'Escrow date' },
+    { key: 'escrowId', label: 'Escrow ID' },
+    { key: 'escrowStatus', label: 'Escrow status' },
+    { key: 'escrowAmount', label: 'Escrow amount' },
   ],
   disputes: [
-    { key: 'date', label: 'Date' },
-    { key: 'record', label: 'Record' },
-    { key: 'status', label: 'Status' },
-    { key: 'reason', label: 'Reason' },
+    { key: 'disputeDate', label: 'Dispute date' },
+    { key: 'disputeId', label: 'Dispute ID' },
+    { key: 'disputeStatus', label: 'Dispute status' },
+    { key: 'disputeReason', label: 'Dispute reason' },
   ],
   visits: [
-    { key: 'date', label: 'Date' },
-    { key: 'path', label: 'Path' },
-    { key: 'location', label: 'Location' },
+    { key: 'visitDate', label: 'Visit date' },
+    { key: 'visitPath', label: 'Path' },
+    { key: 'visitLocation', label: 'Location' },
   ],
 };
 
@@ -2010,50 +2011,45 @@ const CUSTOM_FIELD_GROUP_LABELS: Record<CustomReportFieldGroup, string> = {
   visits: 'Visit details',
 };
 
-function reportFieldsForType(type: CustomReportType, fields: Partial<Record<CustomReportFieldGroup, string[]>>): CustomReportColumn[] {
-  const groups: CustomReportFieldGroup[] = type === 'orders'
-    ? ['orders', 'customers', 'sellers', 'drivers', 'deliveries']
-    : [type];
-  return groups.flatMap((group) => CUSTOM_FIELD_OPTIONS[group].filter((field) => (fields[group] ?? []).includes(field.key)));
+function reportFieldsForEntity(entity: CustomReportEntity, fields: Partial<Record<CustomReportFieldGroup, string[]>>): CustomReportColumn[] {
+  return CUSTOM_FIELD_OPTIONS[entity].filter((field) => (fields[entity] ?? []).includes(field.key));
+}
+
+function reportColumnsForEntities(entities: CustomReportEntity[], fields: Partial<Record<CustomReportFieldGroup, string[]>>): CustomReportColumn[] {
+  return entities.flatMap((entity) => reportFieldsForEntity(entity, fields));
 }
 
 function customCellValue(row: CustomRecord, column: CustomReportColumn) {
   const value = row.cells[column.key] ?? '';
-  return column.key === 'orderAmount' || column.key === 'amount' ? (value ? formatTZS(Number(value)) : '-') : value || '-';
+  return ['orderAmount', 'paymentAmount', 'escrowAmount'].includes(column.key) ? (value ? formatTZS(Number(value)) : '-') : value || '-';
 }
 
 function CustomReportBuilder() {
   const today = new Date().toISOString().slice(0, 10);
-  const [types, setTypes] = useState<CustomReportType[]>(['orders']);
-  const [activeType, setActiveType] = useState<CustomReportType>('orders');
+  const entityOptions = ['orders', 'payments', 'deliveries', 'escrows', 'disputes', 'customers', 'sellers', 'drivers', 'visits'] as CustomReportEntity[];
+  const entityLabels: Record<CustomReportEntity, string> = {
+    orders: 'Orders', payments: 'Payments', deliveries: 'Deliveries', escrows: 'Escrows', disputes: 'Disputes',
+    customers: 'Customers', sellers: 'Sellers', drivers: 'Drivers', visits: 'Visits',
+  };
+  const [entities, setEntities] = useState<CustomReportEntity[]>(['orders']);
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [search, setSearch] = useState('');
+  const [filterEntity, setFilterEntity] = useState<CustomReportEntity>('orders');
   const [status, setStatus] = useState('');
   const [method, setMethod] = useState('');
-  const [page, setPage] = useState(1);
-  const [records, setRecords] = useState<CustomRecord[]>([]);
-  const [total, setTotal] = useState(0);
-  const [selected, setSelected] = useState<Partial<Record<CustomReportType, string[]>>>({});
   const [fields, setFields] = useState<Partial<Record<CustomReportFieldGroup, string[]>>>(DEFAULT_CUSTOM_FIELDS);
   const [preview, setPreview] = useState<CustomReportPreview | null>(null);
+  const [previewPage, setPreviewPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<{ id: string; name: string; config: CustomReportConfig }[]>([]);
   const [templateName, setTemplateName] = useState('');
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
 
-  const config: CustomReportConfig = {
-    types,
-    startDate,
-    endDate,
-    filters: { search, status, method },
-    recordIds: selected,
-    fields,
-  };
-  const selectedForType = selected[activeType] ?? [];
-  const totalPages = Math.max(1, Math.ceil(total / 10));
-  const fieldGroups = Array.from(new Set(types.flatMap((type) => type === 'orders' ? ['orders', 'customers', 'sellers', 'drivers', 'deliveries'] : [type]))) as CustomReportFieldGroup[];
-  const activeColumns = reportFieldsForType(activeType, fields);
+  const columns = reportColumnsForEntities(entities, fields);
+  const config: CustomReportConfig = { entities, startDate, endDate, filters: { entity: filterEntity, search, status, method }, fields };
+  const totalPages = Math.max(1, Math.ceil((preview?.total ?? 0) / 10));
+  const visibleRows = preview?.rows.slice((previewPage - 1) * 10, previewPage * 10) ?? [];
 
   const loadTemplates = async () => {
     try {
@@ -2064,73 +2060,42 @@ function CustomReportBuilder() {
     }
   };
 
-  useEffect(() => {
-    void loadTemplates();
-  }, []);
+  useEffect(() => { void loadTemplates(); }, []);
 
-  useEffect(() => {
-    setLoading(true);
-    void api
-      .get('/admin/reports/records', {
-        params: {
-          type: activeType,
-          startDate,
-          endDate,
-          page,
-          search: search || undefined,
-          status: status || undefined,
-          method: method || undefined,
-        },
-      })
-      .then((response) => {
-        setRecords(response.data.records ?? []);
-        setTotal(response.data.total ?? 0);
-      })
-      .catch(() => toast.error('Failed to load report records'))
-      .finally(() => setLoading(false));
-  }, [activeType, startDate, endDate, page, search, status, method]);
-
-  const toggleType = (type: CustomReportType) => {
-    if (types.includes(type)) {
-      if (types.length === 1) return;
-      const next = types.filter((item) => item !== type);
-      setTypes(next);
-      if (activeType === type) setActiveType(next[0]);
+  const toggleEntity = (entity: CustomReportEntity) => {
+    if (entities.includes(entity)) {
+      if (entities.length === 1) return;
+      const next = entities.filter((item) => item !== entity);
+      setEntities(next);
+      if (filterEntity === entity) setFilterEntity(next[0]);
     } else {
-      setTypes([...types, type]);
-      setActiveType(type);
-      if (!fields[type]) setFields({ ...fields, [type]: CUSTOM_FIELD_OPTIONS[type].map((field) => field.key) });
+      setEntities([...entities, entity]);
+      setFilterEntity(entity);
+      if (!fields[entity]) setFields({ ...fields, [entity]: CUSTOM_FIELD_OPTIONS[entity].map((field) => field.key) });
     }
-    setPage(1);
+    setPreview(null);
   };
 
-  const toggleRecord = (id: string) => {
-    const current = selected[activeType] ?? [];
-    setSelected({
-      ...selected,
-      [activeType]: current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id],
-    });
-  };
-
-  const toggleField = (group: CustomReportFieldGroup, key: string) => {
-    const current = fields[group] ?? [];
-    const next = current.includes(key) ? current.filter((item) => item !== key) : [...current, key];
-    setFields({ ...fields, [group]: next });
+  const toggleField = (entity: CustomReportEntity, key: string) => {
+    const current = fields[entity] ?? [];
+    setFields({ ...fields, [entity]: current.includes(key) ? current.filter((item) => item !== key) : [...current, key] });
     setPreview(null);
   };
 
   const previewReport = async () => {
-    if (!types.some((type) => reportFieldsForType(type, fields).length)) {
-      toast.error('Select at least one report column');
+    if (!entities.length || !columns.length) {
+      toast.error('Select at least one entity and one column');
       return;
     }
+    setLoading(true);
     try {
       const response = await api.post('/admin/reports/custom/preview', config);
       setPreview(response.data);
+      setPreviewPage(1);
     } catch {
-      toast.error('Failed to build custom report');
+      toast.error('Failed to build combined report');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -2140,11 +2105,8 @@ function CustomReportBuilder() {
       return;
     }
     try {
-      if (editingTemplateId) {
-        await api.patch(`/admin/report-templates/${editingTemplateId}`, { name: templateName.trim(), config });
-      } else {
-        await api.post('/admin/report-templates', { name: templateName.trim(), config });
-      }
+      if (editingTemplateId) await api.patch(`/admin/report-templates/${editingTemplateId}`, { name: templateName.trim(), config });
+      else await api.post('/admin/report-templates', { name: templateName.trim(), config });
       setTemplateName('');
       setEditingTemplateId(null);
       await loadTemplates();
@@ -2157,18 +2119,18 @@ function CustomReportBuilder() {
   const loadTemplate = (id: string) => {
     const template = templates.find((item) => item.id === id);
     if (!template) return;
+    const savedEntities = template.config.entities ?? template.config.types ?? ['orders'];
     setEditingTemplateId(template.id);
     setTemplateName(template.name);
-    setTypes(template.config.types);
-    setActiveType(template.config.types[0] ?? 'orders');
+    setEntities(savedEntities);
+    setFilterEntity(template.config.filters?.entity ?? savedEntities[0]);
     setStartDate(template.config.startDate);
     setEndDate(template.config.endDate);
     setSearch(template.config.filters?.search ?? '');
     setStatus(template.config.filters?.status ?? '');
     setMethod(template.config.filters?.method ?? '');
-    setSelected(template.config.recordIds ?? {});
     setFields(template.config.fields ?? DEFAULT_CUSTOM_FIELDS);
-    setPage(1);
+    setPreview(null);
   };
 
   const deleteTemplate = async (id: string) => {
@@ -2198,103 +2160,46 @@ function CustomReportBuilder() {
     if (!preview) return;
     const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
     const margin = 32;
-    let y = 42;
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(18);
-    pdf.text('SpareBolt custom report', margin, y);
-    y += 18;
+    pdf.text('SpareBolt custom report', margin, 42);
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(10);
-    pdf.text(`${startDate} to ${endDate}`, margin, y);
-    y += 18;
-    preview.sections.forEach((section) => {
-      if (!section.columns.length) return;
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(12);
-      pdf.text(`${CUSTOM_TYPE_LABELS[section.type]} | ${section.total} records | ${formatTZS(section.amount)}`, margin, y);
-      y += 8;
-      autoTable(pdf, {
-        startY: y,
-        margin: { left: margin, right: margin },
-        head: [section.columns.map((column) => column.label)],
-        body: section.records.map((row) => section.columns.map((column) => customCellValue(row, column))),
-        theme: 'grid',
-        styles: { font: 'helvetica', fontSize: 7, cellPadding: 4, overflow: 'linebreak', valign: 'top' },
-        headStyles: { fillColor: [33, 63, 94], textColor: 255, fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
-        tableWidth: 'auto',
-        showHead: 'everyPage',
-      });
-      y = (pdf as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y;
-      y += 22;
+    pdf.text(`${startDate} to ${endDate}`, margin, 60);
+    autoTable(pdf, {
+      startY: 76,
+      margin: { left: margin, right: margin },
+      head: [preview.columns.map((column) => column.label)],
+      body: preview.rows.map((row) => preview.columns.map((column) => customCellValue(row, column))),
+      theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 7, cellPadding: 4, overflow: 'linebreak', valign: 'top' },
+      headStyles: { fillColor: [33, 63, 94], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      showHead: 'everyPage',
     });
     pdf.save(`sparebolt-custom-report-${startDate}.pdf`);
   };
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
-        <div>
-          <p className="text-sm font-bold text-foreground">1. Choose report sections</p>
-          <p className="mt-1 text-xs text-muted-foreground">Select the kinds of records you want to appear together in one report.</p>
+      <div className="grid gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <div><p className="text-sm font-bold text-foreground">1. Select entities to combine</p><p className="mt-1 text-xs text-muted-foreground">Choose the related data sources that should become one report.</p></div>
+        <div className="flex flex-wrap gap-2">{entityOptions.map((entity) => <button key={entity} type="button" aria-pressed={entities.includes(entity)} onClick={() => toggleEntity(entity)} className={cn('rounded-lg border px-3 py-2 text-xs font-bold cursor-pointer', entities.includes(entity) ? 'border-bolt-500 bg-bolt-500/10 text-bolt-700 dark:text-bolt-300' : 'border-border text-muted-foreground hover:text-foreground')}>{entities.includes(entity) ? 'Selected: ' : ''}{entityLabels[entity]}</button>)}</div>
+        {entities.includes('visits') && entities.length > 1 && <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">Visits cannot be combined with order-related entities. Select Visits alone.</p>}
+        <div className="border-t border-border pt-4"><p className="text-sm font-bold text-foreground">2. Choose columns</p><p className="mt-1 text-xs text-muted-foreground">Every selected field becomes its own column in the single combined report.</p><div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{entities.map((entity) => <div key={entity} className="rounded-lg border border-border bg-background p-3"><p className="mb-2 text-xs font-bold text-foreground">{entityLabels[entity]}</p><div className="grid gap-2 sm:grid-cols-2">{CUSTOM_FIELD_OPTIONS[entity].map((field) => <label key={field.key} className="flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={(fields[entity] ?? []).includes(field.key)} onChange={() => toggleField(entity, field.key)} /><span>{field.label}</span></label>)}</div></div>)}</div></div>
+        <div className="border-t border-border pt-4"><p className="text-sm font-bold text-foreground">3. Set filters and generate</p></div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <label className="text-xs font-bold text-muted-foreground">Start date<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground" /></label>
+          <label className="text-xs font-bold text-muted-foreground">End date<input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground" /></label>
+          <label className="text-xs font-bold text-muted-foreground">Filter entity<select value={filterEntity} onChange={(event) => { const value = event.target.value as CustomReportEntity; setFilterEntity(value); setStatus(''); setMethod(''); }} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground">{entities.map((entity) => <option key={entity} value={entity}>{entityLabels[entity]}</option>)}</select></label>
+          <label className="text-xs font-bold text-muted-foreground">Status<select value={status} disabled={!CUSTOM_STATUS_OPTIONS[filterEntity as CustomReportType]} onChange={(event) => setStatus(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground disabled:opacity-50"><option value="">Any status</option>{CUSTOM_STATUS_OPTIONS[filterEntity as CustomReportType]?.map((option) => <option key={option} value={option}>{option.replace(/_/g, ' ')}</option>)}</select></label>
+          <label className="text-xs font-bold text-muted-foreground">Method<select value={method} disabled={filterEntity !== 'payments'} onChange={(event) => setMethod(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground disabled:opacity-50"><option value="">Any method</option>{filterEntity === 'payments' && CUSTOM_METHOD_OPTIONS.map((option) => <option key={option} value={option}>{option.replace(/_/g, ' ')}</option>)}</select></label>
+          <label className="text-xs font-bold text-muted-foreground">Search<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search all selected fields" className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground" /></label>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {(Object.keys(CUSTOM_TYPE_LABELS) as CustomReportType[]).map((type) => (
-            <button key={type} type="button" aria-pressed={types.includes(type)} onClick={() => toggleType(type)} className={cn('rounded-lg border px-3 py-2 text-xs font-bold cursor-pointer', types.includes(type) ? 'border-bolt-500 bg-bolt-500/10 text-bolt-700 dark:text-bolt-300' : 'border-border text-muted-foreground hover:text-foreground')}>{types.includes(type) ? 'Selected: ' : ''}{CUSTOM_TYPE_LABELS[type]}</button>
-          ))}
-        </div>
-        <div className="border-t border-border pt-3">
-          <p className="text-sm font-bold text-foreground">Choose columns</p>
-          <p className="mt-1 text-xs text-muted-foreground">Select exactly which fields should become columns in the combined report.</p>
-          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {fieldGroups.map((group) => (
-              <div key={group} className="rounded-lg border border-border bg-background p-3">
-                <p className="mb-2 text-xs font-bold text-foreground">{CUSTOM_FIELD_GROUP_LABELS[group]}</p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {CUSTOM_FIELD_OPTIONS[group].map((field) => (
-                    <label key={field.key} className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <input type="checkbox" checked={(fields[group] ?? []).includes(field.key)} onChange={() => toggleField(group, field.key)} />
-                      <span>{field.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="border-t border-border pt-3">
-          <p className="text-sm font-bold text-foreground">2. Set date and filters</p>
-          <p className="mt-1 text-xs text-muted-foreground">These filters apply to the active section below. Use Orders with “Not delivered” to find incomplete deliveries.</p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <label className="text-xs font-bold text-muted-foreground">Start date<input type="date" value={startDate} onChange={(event) => { setStartDate(event.target.value); setPage(1); }} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground" /></label>
-          <label className="text-xs font-bold text-muted-foreground">End date<input type="date" value={endDate} onChange={(event) => { setEndDate(event.target.value); setPage(1); }} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground" /></label>
-          <label className="text-xs font-bold text-muted-foreground">Search<input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search" className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground" /></label>
-          <label className="text-xs font-bold text-muted-foreground">Status<select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground"><option value="">Any status</option>{CUSTOM_STATUS_OPTIONS[activeType].map((option) => <option key={option} value={option}>{option.replace(/_/g, ' ')}</option>)}</select></label>
-          <label className="text-xs font-bold text-muted-foreground">Method<select value={method} disabled={activeType !== 'payments'} onChange={(event) => { setMethod(event.target.value); setPage(1); }} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-50"><option value="">{activeType === 'payments' ? 'Any method' : 'Payments only'}</option>{activeType === 'payments' && CUSTOM_METHOD_OPTIONS.map((option) => <option key={option} value={option}>{option.replace(/_/g, ' ')}</option>)}</select></label>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-          <select defaultValue="" onChange={(event) => loadTemplate(event.target.value)} className="h-9 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground"><option value="">Load saved template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select>
-          <input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="Template name" className="h-9 rounded-lg border border-border bg-background px-3 text-xs text-foreground" />
-          <Button size="sm" variant="secondary" onClick={saveTemplate}><Save className="h-4 w-4" /> {editingTemplateId ? 'Update' : 'Save'}</Button>
-          <Button size="sm" onClick={previewReport}>Preview report</Button>
-          <Button size="sm" variant="secondary" onClick={exportCsv}><Download className="h-4 w-4" /> CSV</Button>
-          <Button size="sm" variant="secondary" onClick={exportPdf} disabled={!preview}><Printer className="h-4 w-4" /> PDF</Button>
-        </div>
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3"><select defaultValue="" onChange={(event) => loadTemplate(event.target.value)} className="h-9 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground"><option value="">Load saved template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select><input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="Template name" className="h-9 rounded-lg border border-border bg-background px-3 text-xs text-foreground" /><Button size="sm" variant="secondary" onClick={saveTemplate}><Save className="h-4 w-4" /> {editingTemplateId ? 'Update' : 'Save'}</Button><Button size="sm" onClick={previewReport} disabled={loading}>{loading ? 'Building...' : 'Generate report'}</Button><Button size="sm" variant="secondary" onClick={exportCsv} disabled={!preview}><Download className="h-4 w-4" /> CSV</Button><Button size="sm" variant="secondary" onClick={exportPdf} disabled={!preview}><Printer className="h-4 w-4" /> PDF</Button></div>
         {templates.length > 0 && <div className="flex flex-wrap gap-2 text-xs text-muted-foreground"><span>Saved:</span>{templates.map((template) => <span key={template.id} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1">{template.name}<button type="button" onClick={() => deleteTemplate(template.id)} aria-label={`Delete ${template.name}`} title="Delete template" className="cursor-pointer text-muted-foreground hover:text-danger"><Trash2 className="h-3 w-3" /></button></span>)}</div>}
       </div>
-
-      <div className="rounded-2xl border border-border bg-card shadow-sm">
-        <div className="border-b border-border px-4 py-3">
-          <p className="text-sm font-bold text-foreground">3. Select records</p>
-          <p className="mt-1 text-xs text-muted-foreground">Switch between selected sections, tick individual records, then preview the final report.</p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">{types.map((type) => <button key={type} type="button" onClick={() => { setActiveType(type); if (type !== 'payments') setMethod(''); setPage(1); }} className={cn('rounded-lg px-3 py-2 text-xs font-bold cursor-pointer', activeType === type ? 'bg-bolt-600 text-white' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>{CUSTOM_TYPE_LABELS[type]} ({selected[type]?.length ?? 0} selected)</button>)}</div>
-        </div>
-        <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b border-border bg-muted/70 text-[11px] font-bold uppercase tracking-wide text-muted-foreground"><tr><th className="w-12 px-4 py-3">Select</th>{activeColumns.map((column) => <th key={column.key} className="px-4 py-3">{column.label}</th>)}</tr></thead><tbody className="divide-y divide-border">{records.map((row) => <tr key={row.id} className="hover:bg-muted/50"><td className="px-4 py-3"><input type="checkbox" checked={selectedForType.includes(row.id)} onChange={() => toggleRecord(row.id)} aria-label={`Select ${row.label}`} /></td>{activeColumns.map((column) => <td key={column.key} className="px-4 py-3">{customCellValue(row, column)}</td>)}</tr>)}</tbody></table>{!loading && !records.length && <p className="py-10 text-center text-sm text-muted-foreground">No matching records</p>}</div>
-        <PaginationControls page={page} totalPages={totalPages} totalItems={total} onPage={setPage} />
-      </div>
-
-      {preview && <div className="space-y-4"><div><h3 className="font-display text-lg font-bold">Report preview</h3><p className="mt-1 text-xs text-muted-foreground">This table uses the exact columns selected above and will match the PDF and CSV exports.</p></div>{preview.sections.map((section) => <ReportSection key={section.type} title={`${CUSTOM_TYPE_LABELS[section.type]} · ${section.total} records`}><ReportRow label="Total amount" value={formatTZS(section.amount)} /><div className="mt-2 overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead className="border-b border-border text-[10px] font-bold uppercase text-muted-foreground"><tr>{section.columns.map((column) => <th key={column.key} className="px-2 py-2">{column.label}</th>)}</tr></thead><tbody className="divide-y divide-border">{section.records.slice(0, 10).map((row) => <tr key={row.id} className="align-top">{section.columns.map((column) => <td key={column.key} className="px-2 py-2">{customCellValue(row, column)}</td>)}</tr>)}</tbody></table></div></ReportSection>)}</div>}
+      {preview && <div className="rounded-2xl border border-border bg-card p-4 shadow-sm"><div className="mb-3 flex flex-wrap items-end justify-between gap-2"><div><h3 className="font-display text-lg font-bold">Combined report</h3><p className="mt-1 text-xs text-muted-foreground">{preview.total} matching rows from {entities.map((entity) => entityLabels[entity]).join(', ')}.</p></div><p className="text-sm font-bold">Total: {formatTZS(preview.amount)}</p></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-xs"><thead className="border-b border-border bg-muted/70 text-[10px] font-bold uppercase text-muted-foreground"><tr>{preview.columns.map((column) => <th key={column.key} className="whitespace-nowrap px-2 py-2">{column.label}</th>)}</tr></thead><tbody className="divide-y divide-border">{visibleRows.map((row) => <tr key={row.id} className="align-top hover:bg-muted/50">{preview.columns.map((column) => <td key={column.key} className="whitespace-nowrap px-2 py-2">{customCellValue(row, column)}</td>)}</tr>)}</tbody></table>{!visibleRows.length && <p className="py-10 text-center text-sm text-muted-foreground">No matching records</p>}</div><PaginationControls page={previewPage} totalPages={totalPages} totalItems={preview.total} onPage={setPreviewPage} /></div>}
     </div>
   );
 }

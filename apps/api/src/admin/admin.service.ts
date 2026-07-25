@@ -5,7 +5,6 @@ import { NotificationsService } from '../notifications/notifications.service';
 import {
   buildAdminReport,
   buildCustomReport,
-  customRecordPicker,
   customReportCsv,
   type CustomReportConfig,
   reportCsv,
@@ -83,14 +82,6 @@ export class AdminService {
 
   customReport(config: CustomReportConfig) {
     return buildCustomReport(this.prisma, config);
-  }
-
-  customRecords(
-    type: string,
-    config: Pick<CustomReportConfig, 'startDate' | 'endDate' | 'filters'>,
-    page?: number,
-  ) {
-    return customRecordPicker(this.prisma, type, config, page);
   }
 
   async customReportCsv(config: CustomReportConfig) {

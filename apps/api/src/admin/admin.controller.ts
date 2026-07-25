@@ -49,19 +49,6 @@ export class AdminController {
     return this.admin.reportCsv(period, anchor);
   }
 
-  @Get('reports/records')
-  records(
-    @Query('type') type: string,
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string,
-    @Query('page') page?: string,
-    @Query('search') search?: string,
-    @Query('status') status?: string,
-    @Query('method') method?: string,
-  ) {
-    return this.admin.customRecords(type, { startDate, endDate, filters: { search, status, method } }, Number(page || 1));
-  }
-
   @Post('reports/custom/preview')
   previewCustomReport(@Body() config: CustomReportConfig) {
     return this.admin.customReport(config);

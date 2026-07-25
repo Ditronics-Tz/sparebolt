@@ -404,16 +404,17 @@ export const CUSTOM_REPORT_TYPES = [
 
 export type CustomReportType = (typeof CUSTOM_REPORT_TYPES)[number];
 export type CustomReportFieldGroup = CustomReportType | 'customers' | 'sellers' | 'drivers';
+export type CustomReportEntity = CustomReportFieldGroup;
 
 export type CustomReportFields = Partial<Record<CustomReportFieldGroup, string[]>>;
 
 export type CustomReportConfig = {
-  types: CustomReportType[];
+  entities?: CustomReportEntity[];
   startDate: string;
   endDate: string;
-  filters?: { search?: string; status?: string; method?: string };
-  recordIds?: Partial<Record<CustomReportType, string[]>>;
+  filters?: { entity?: CustomReportEntity; search?: string; status?: string; method?: string };
   fields?: CustomReportFields;
+  types?: CustomReportType[];
 };
 
 export type CustomRecord = {
@@ -460,28 +461,28 @@ export const CUSTOM_REPORT_FIELD_OPTIONS: Record<CustomReportFieldGroup, CustomR
     { key: 'deliveredDate', label: 'Delivered date' },
   ],
   payments: [
-    { key: 'date', label: 'Date' },
-    { key: 'record', label: 'Record' },
-    { key: 'status', label: 'Status' },
-    { key: 'amount', label: 'Amount' },
-    { key: 'method', label: 'Method' },
+    { key: 'paymentDate', label: 'Payment date' },
+    { key: 'paymentId', label: 'Payment ID' },
+    { key: 'paymentStatus', label: 'Payment status' },
+    { key: 'paymentAmount', label: 'Payment amount' },
+    { key: 'paymentMethod', label: 'Payment method' },
   ],
   escrows: [
-    { key: 'date', label: 'Date' },
-    { key: 'record', label: 'Record' },
-    { key: 'status', label: 'Status' },
-    { key: 'amount', label: 'Amount' },
+    { key: 'escrowDate', label: 'Escrow date' },
+    { key: 'escrowId', label: 'Escrow ID' },
+    { key: 'escrowStatus', label: 'Escrow status' },
+    { key: 'escrowAmount', label: 'Escrow amount' },
   ],
   disputes: [
-    { key: 'date', label: 'Date' },
-    { key: 'record', label: 'Record' },
-    { key: 'status', label: 'Status' },
-    { key: 'reason', label: 'Reason' },
+    { key: 'disputeDate', label: 'Dispute date' },
+    { key: 'disputeId', label: 'Dispute ID' },
+    { key: 'disputeStatus', label: 'Dispute status' },
+    { key: 'disputeReason', label: 'Dispute reason' },
   ],
   visits: [
-    { key: 'date', label: 'Date' },
-    { key: 'path', label: 'Path' },
-    { key: 'location', label: 'Location' },
+    { key: 'visitDate', label: 'Visit date' },
+    { key: 'visitPath', label: 'Path' },
+    { key: 'visitLocation', label: 'Location' },
   ],
 };
 
@@ -490,19 +491,22 @@ const DEFAULT_CUSTOM_FIELDS: CustomReportFields = {
   customers: ['customerName', 'customerPhone'],
   sellers: ['sellerName', 'sellerPhone'],
   drivers: ['driverName', 'driverPhone', 'vehiclePlate'],
-  payments: ['date', 'record', 'status', 'amount', 'method'],
-  escrows: ['date', 'record', 'status', 'amount'],
-  disputes: ['date', 'record', 'status', 'reason'],
+  payments: ['paymentDate', 'paymentId', 'paymentStatus', 'paymentAmount', 'paymentMethod'],
+  escrows: ['escrowDate', 'escrowId', 'escrowStatus', 'escrowAmount'],
+  disputes: ['disputeDate', 'disputeId', 'disputeStatus', 'disputeReason'],
   deliveries: ['deliveryDate', 'deliveryOrderId', 'deliveryStatus'],
-  visits: ['date', 'path', 'location'],
+  visits: ['visitDate', 'visitPath', 'visitLocation'],
 };
 
-function customColumns(type: CustomReportType, fields?: CustomReportFields): CustomReportColumn[] {
-  const groups: CustomReportFieldGroup[] = type === 'orders'
-    ? ['orders', 'customers', 'sellers', 'drivers', 'deliveries']
-    : [type];
+function resolvedEntities(config: Pick<CustomReportConfig, 'entities' | 'types'>): CustomReportEntity[] {
+  if (config.entities?.length) return [...new Set(config.entities)];
+  if (config.types?.length) return [...new Set(config.types)];
+  return [];
+}
+
+function customColumns(entities: CustomReportEntity[], fields?: CustomReportFields): CustomReportColumn[] {
   const selected = fields ?? DEFAULT_CUSTOM_FIELDS;
-  return groups.flatMap((group) => {
+  return entities.flatMap((group) => {
     const keys = selected[group] ?? (fields ? [] : DEFAULT_CUSTOM_FIELDS[group] ?? CUSTOM_REPORT_FIELD_OPTIONS[group].map((field) => field.key));
     return CUSTOM_REPORT_FIELD_OPTIONS[group].filter((field) => keys.includes(field.key));
   });
@@ -536,16 +540,21 @@ function validCustomTypes(types: string[]) {
 
 function customMatch(row: CustomRecord, config: CustomReportConfig) {
   const filters = config.filters ?? {};
+  const statusKey = filters.entity === 'payments' ? 'paymentStatus'
+    : filters.entity === 'deliveries' ? 'deliveryStatus'
+      : filters.entity === 'escrows' ? 'escrowStatus'
+        : filters.entity === 'disputes' ? 'disputeStatus'
+          : 'orderStatus';
+  const filterStatus = row.cells[statusKey] || row.status;
   if (filters.status === 'NOT_DELIVERED') {
-    if (['DELIVERED', 'CONFIRMED', 'REFUNDED', 'CANCELLED'].includes(row.status)) return false;
-  } else if (filters.status && row.status !== filters.status) return false;
-  if (filters.method && !row.detail.toLowerCase().includes(filters.method.toLowerCase())) return false;
+    if (['DELIVERED', 'CONFIRMED', 'REFUNDED', 'CANCELLED'].includes(row.cells.orderStatus || row.status)) return false;
+  } else if (filters.status && filterStatus !== filters.status) return false;
+  if (filters.method && !(row.cells.paymentMethod || row.detail).toLowerCase().includes(filters.method.toLowerCase())) return false;
   if (filters.search) {
     const search = filters.search.toLowerCase();
     if (!`${row.label} ${row.status} ${row.detail} ${Object.values(row.cells).join(' ')}`.toLowerCase().includes(search)) return false;
   }
-  const selected = config.recordIds?.[config.types.find(() => true) as CustomReportType];
-  return !selected || selected.length === 0 || selected.includes(row.id);
+  return true;
 }
 
 async function recordsForType(
@@ -711,42 +720,155 @@ async function recordsForType(
   });
 }
 
-export async function customRecordPicker(
-  prisma: PrismaService,
-  typeValue: string,
-  config: Pick<CustomReportConfig, 'startDate' | 'endDate' | 'filters' | 'fields'>,
-  page = 1,
-) {
-  const type = validCustomTypes([typeValue])[0];
-  if (!type) throw new BadRequestException('Unsupported custom report type');
-  const rows = await recordsForType(prisma, type, customRange(config));
-  const matching = rows.filter((row) => customMatch(row, { ...config, types: [type] }));
-  const safePage = Math.max(1, Math.floor(page));
-  return { type, page: safePage, pageSize: 10, total: matching.length, columns: customColumns(type, config.fields), records: matching.slice((safePage - 1) * 10, safePage * 10) };
-}
-
 export async function buildCustomReport(prisma: PrismaService, config: CustomReportConfig) {
-  const types = validCustomTypes(config.types);
-  if (!types.length) throw new BadRequestException('Select at least one report type');
+  const entities = resolvedEntities(config);
+  if (!entities.length) throw new BadRequestException('Select at least one report entity');
+  const columns = customColumns(entities, config.fields);
+  if (!columns.length) throw new BadRequestException('Select at least one report column');
   const range = customRange(config);
-  const sections = [];
-  for (const type of types) {
-    const rows = await recordsForType(prisma, type, range);
-    const selectedIds = config.recordIds?.[type];
-    const matching = rows.filter((row) => {
-      if (selectedIds?.length && !selectedIds.includes(row.id)) return false;
-      return customMatch(row, { ...config, types: [type], recordIds: { [type]: selectedIds } });
+  if (entities.includes('visits')) {
+    if (entities.length > 1) throw new BadRequestException('Visits cannot be combined with order-related entities');
+    const visits = await prisma.visitEvent.findMany({
+      where: { createdAt: { gte: range.start, lte: range.end } },
+      select: { id: true, createdAt: true, path: true, city: true, region: true, country: true },
+      orderBy: { createdAt: 'desc' },
+      take: 1000,
     });
-    sections.push({ type, total: matching.length, amount: matching.reduce((sum, row) => sum + (row.amount ?? 0), 0), columns: customColumns(type, config.fields), records: matching });
+    const rows = visits.map((row) => ({
+      id: row.id,
+      date: row.createdAt.toISOString(),
+      label: row.path,
+      status: 'VISIT',
+      amount: null,
+      detail: [row.city, row.region, row.country].filter(Boolean).join(', ') || 'Unknown location',
+      cells: {
+        visitDate: row.createdAt.toISOString().slice(0, 10),
+        visitPath: row.path,
+        visitLocation: [row.city, row.region, row.country].filter(Boolean).join(', ') || 'Unknown location',
+      } as Record<string, string>,
+    })).filter((row) => customMatch(row, { ...config, entities }));
+    return { startDate: config.startDate, endDate: config.endDate, entities, columns, total: rows.length, amount: 0, rows };
   }
-  return { startDate: config.startDate, endDate: config.endDate, sections };
+
+  const rows = await prisma.order.findMany({
+    where: { createdAt: { gte: range.start, lte: range.end } },
+    select: {
+      id: true,
+      orderNumber: true,
+      status: true,
+      total: true,
+      createdAt: true,
+      customer: { select: { firstName: true, lastName: true, phone: true, email: true } },
+      items: { select: { sellerId: true } },
+      payment: { select: { id: true, status: true, amount: true, method: true, createdAt: true } },
+      escrow: { select: { id: true, status: true, amount: true, heldAt: true } },
+      dispute: { select: { id: true, status: true, reason: true, createdAt: true } },
+      delivery: {
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
+          pickupLabel: true,
+          pickupCity: true,
+          dropoffLat: true,
+          dropoffLng: true,
+          deliveredAt: true,
+          driver: {
+            select: {
+              legalFullName: true,
+              secondaryPhone: true,
+              vehiclePlate: true,
+              vehicleType: true,
+              user: { select: { firstName: true, lastName: true, phone: true } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 1000,
+  });
+  const sellerIds = [...new Set(rows.flatMap((row) => row.items.map((item) => item.sellerId)))];
+  const sellerRows = entities.includes('sellers') && sellerIds.length
+    ? await prisma.sellerProfile.findMany({ where: { id: { in: sellerIds } }, select: { id: true, businessName: true, legalFullName: true, user: { select: { phone: true } } } })
+    : [];
+  const sellers = new Map(sellerRows.map((seller) => [seller.id, seller]));
+  const relationFiltered = rows.filter((row) => {
+    if (entities.includes('payments') && !row.payment) return false;
+    if (entities.includes('escrows') && !row.escrow) return false;
+    if (entities.includes('disputes') && !row.dispute) return false;
+    if (entities.includes('deliveries') && !row.delivery) return false;
+    if (entities.includes('drivers') && !row.delivery?.driver) return false;
+    if (entities.includes('sellers') && !row.items.length) return false;
+    return true;
+  });
+  const reportRows = relationFiltered.flatMap((row) => {
+    const driver = row.delivery?.driver;
+    const driverName = driver ? driver.legalFullName || `${driver.user.firstName} ${driver.user.lastName}` : '';
+    const sellerItems = entities.includes('sellers') ? row.items : [{ sellerId: '' }];
+    return sellerItems.map((item, sellerIndex) => {
+      const seller = sellers.get(item.sellerId);
+      const cells: Record<string, string> = {
+        orderDate: row.createdAt.toISOString().slice(0, 10),
+        orderId: row.orderNumber,
+        orderAmount: String(amount(row.total)),
+        orderStatus: row.status,
+        customerName: `${row.customer.firstName} ${row.customer.lastName}`,
+        customerPhone: row.customer.phone || '',
+        customerEmail: row.customer.email || '',
+        sellerName: seller?.businessName || '',
+        sellerContactName: seller?.legalFullName || '',
+        sellerPhone: seller?.user.phone || '',
+        driverName,
+        driverPhone: driver?.user.phone || driver?.secondaryPhone || '',
+        vehiclePlate: driver?.vehiclePlate || '',
+        vehicleType: driver?.vehicleType || '',
+        deliveryDate: row.delivery?.createdAt.toISOString().slice(0, 10) || '',
+        deliveryOrderId: row.orderNumber,
+        deliveryStatus: row.delivery?.status || '',
+        pickupLocation: [row.delivery?.pickupLabel, row.delivery?.pickupCity].filter(Boolean).join(', '),
+        dropoffLocation: row.delivery?.dropoffLat != null && row.delivery?.dropoffLng != null ? `${row.delivery.dropoffLat}, ${row.delivery.dropoffLng}` : '',
+        deliveredDate: row.delivery?.deliveredAt?.toISOString().slice(0, 10) || '',
+        paymentDate: row.payment?.createdAt.toISOString().slice(0, 10) || '',
+        paymentId: row.payment?.id || '',
+        paymentStatus: row.payment?.status || '',
+        paymentAmount: row.payment ? String(amount(row.payment.amount)) : '',
+        paymentMethod: row.payment?.method || '',
+        escrowDate: row.escrow?.heldAt.toISOString().slice(0, 10) || '',
+        escrowId: row.escrow?.id || '',
+        escrowStatus: row.escrow?.status || '',
+        escrowAmount: row.escrow ? String(amount(row.escrow.amount)) : '',
+        disputeDate: row.dispute?.createdAt.toISOString().slice(0, 10) || '',
+        disputeId: row.dispute?.id || '',
+        disputeStatus: row.dispute?.status || '',
+        disputeReason: row.dispute?.reason || '',
+      };
+      return {
+        id: `${row.id}:${item.sellerId || sellerIndex}`,
+        date: row.createdAt.toISOString(),
+        label: row.orderNumber,
+        status: row.status,
+        amount: amount(row.total),
+        detail: Object.values(cells).join(' '),
+        cells,
+      };
+    });
+  }).filter((row) => customMatch(row, { ...config, entities }));
+  const uniqueOrderAmounts = new Map(reportRows.map((row) => [row.cells.orderId, row.amount ?? 0]));
+  return {
+    startDate: config.startDate,
+    endDate: config.endDate,
+    entities,
+    columns,
+    total: reportRows.length,
+    amount: [...uniqueOrderAmounts.values()].reduce((sum, value) => sum + value, 0),
+    rows: reportRows,
+  };
 }
 
 export function customReportCsv(report: Awaited<ReturnType<typeof buildCustomReport>>) {
   const rows: string[][] = [['SpareBolt custom report'], ['Start date', report.startDate], ['End date', report.endDate], []];
-  for (const section of report.sections) {
-    rows.push([], [section.type.toUpperCase()], section.columns.map((column) => column.label));
-    for (const row of section.records) rows.push(section.columns.map((column) => row.cells[column.key] ?? ''));
-  }
+  rows.push(report.columns.map((column) => column.label));
+  for (const row of report.rows) rows.push(report.columns.map((column) => row.cells[column.key] ?? ''));
   return rows.map((row) => row.map(csvCell).join(',')).join('\n');
 }
