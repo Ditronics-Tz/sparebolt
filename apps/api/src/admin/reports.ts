@@ -419,6 +419,7 @@ export type CustomRecord = {
   status: string;
   amount: number | null;
   detail: string;
+  related?: { customer: string; sellers: string[]; driver: string | null };
 };
 
 function customRange(config: Pick<CustomReportConfig, 'startDate' | 'endDate'>) {
@@ -439,7 +440,9 @@ function validCustomTypes(types: string[]) {
 
 function customMatch(row: CustomRecord, config: CustomReportConfig) {
   const filters = config.filters ?? {};
-  if (filters.status && row.status !== filters.status) return false;
+  if (filters.status === 'NOT_DELIVERED') {
+    if (['DELIVERED', 'CONFIRMED', 'REFUNDED', 'CANCELLED'].includes(row.status)) return false;
+  } else if (filters.status && row.status !== filters.status) return false;
   if (filters.method && !row.detail.toLowerCase().includes(filters.method.toLowerCase())) return false;
   if (filters.search) {
     const search = filters.search.toLowerCase();
@@ -457,11 +460,40 @@ async function recordsForType(
   if (type === 'orders') {
     const rows = await prisma.order.findMany({
       where: { createdAt: { gte: range.start, lte: range.end } },
-      select: { id: true, orderNumber: true, status: true, total: true, createdAt: true, customer: { select: { firstName: true, lastName: true } } },
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        total: true,
+        createdAt: true,
+        customer: { select: { firstName: true, lastName: true } },
+        items: { select: { sellerId: true } },
+        delivery: { select: { driver: { select: { legalFullName: true, vehiclePlate: true, user: { select: { firstName: true, lastName: true } } } } } },
+      },
       orderBy: { createdAt: 'desc' },
       take: 1000,
     });
-    return rows.map((row) => ({ id: row.id, date: row.createdAt.toISOString(), label: row.orderNumber, status: row.status, amount: amount(row.total), detail: `${row.customer.firstName} ${row.customer.lastName}` }));
+    const sellerIds = [...new Set(rows.flatMap((row) => row.items.map((item) => item.sellerId)))];
+    const sellerRows = sellerIds.length
+      ? await prisma.sellerProfile.findMany({ where: { id: { in: sellerIds } }, select: { id: true, businessName: true } })
+      : [];
+    const sellerNames = new Map(sellerRows.map((seller) => [seller.id, seller.businessName]));
+    return rows.map((row) => {
+      const customer = `${row.customer.firstName} ${row.customer.lastName}`;
+      const sellers = [...new Set(row.items.map((item) => sellerNames.get(item.sellerId) || 'Unknown seller'))];
+      const driver = row.delivery?.driver
+        ? `${row.delivery.driver.legalFullName || `${row.delivery.driver.user.firstName} ${row.delivery.driver.user.lastName}`} (${row.delivery.driver.vehiclePlate})`
+        : null;
+      return {
+        id: row.id,
+        date: row.createdAt.toISOString(),
+        label: row.orderNumber,
+        status: row.status,
+        amount: amount(row.total),
+        detail: `Customer: ${customer} | Sellers: ${sellers.join(', ') || '—'} | Driver: ${driver || 'Not assigned'}`,
+        related: { customer, sellers, driver },
+      };
+    });
   }
   if (type === 'payments') {
     const rows = await prisma.payment.findMany({

@@ -248,7 +248,7 @@ type CustomReportConfig = {
   filters?: { search?: string; status?: string; method?: string };
   recordIds?: Partial<Record<CustomReportType, string[]>>;
 };
-type CustomRecord = { id: string; date: string; label: string; status: string; amount: number | null; detail: string };
+type CustomRecord = { id: string; date: string; label: string; status: string; amount: number | null; detail: string; related?: { customer: string; sellers: string[]; driver: string | null } };
 type CustomReportPreview = { startDate: string; endDate: string; sections: { type: CustomReportType; total: number; amount: number; records: CustomRecord[] }[] };
 type ReportMetric = { value: number; previous: number; change: number | null };
 type AdminReport = {
@@ -1915,7 +1915,7 @@ const CUSTOM_TYPE_LABELS: Record<CustomReportType, string> = {
 };
 
 const CUSTOM_STATUS_OPTIONS: Record<CustomReportType, string[]> = {
-  orders: ['PENDING_PAYMENT', 'PAID_ESCROW', 'AWAITING_DRIVER', 'DRIVER_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'CONFIRMED', 'DISPUTED', 'REFUNDED', 'CANCELLED'],
+  orders: ['NOT_DELIVERED', 'PENDING_PAYMENT', 'PAID_ESCROW', 'AWAITING_DRIVER', 'DRIVER_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'CONFIRMED', 'DISPUTED', 'REFUNDED', 'CANCELLED'],
   payments: ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'REFUNDED'],
   escrows: ['HELD', 'RELEASED_TO_SELLER', 'REFUNDED_TO_CUSTOMER', 'PARTIAL_REFUND'],
   disputes: ['OPEN', 'UNDER_REVIEW', 'RESOLVED_CUSTOMER', 'RESOLVED_SELLER', 'CLOSED'],
@@ -2145,7 +2145,7 @@ function CustomReportBuilder() {
         <PaginationControls page={page} totalPages={totalPages} totalItems={total} onPage={setPage} />
       </div>
 
-      {preview && <div className="space-y-4"><h3 className="font-display text-lg font-bold">Report preview</h3>{preview.sections.map((section) => <ReportSection key={section.type} title={`${CUSTOM_TYPE_LABELS[section.type]} · ${section.total} records`}><ReportRow label="Total amount" value={formatTZS(section.amount)} />{section.records.slice(0, 10).map((row) => <ReportRow key={row.id} label={row.label} value={row.amount == null ? row.status : formatTZS(row.amount)} />)}</ReportSection>)}</div>}
+      {preview && <div className="space-y-4"><h3 className="font-display text-lg font-bold">Report preview</h3>{preview.sections.map((section) => <ReportSection key={section.type} title={`${CUSTOM_TYPE_LABELS[section.type]} · ${section.total} records`}><ReportRow label="Total amount" value={formatTZS(section.amount)} />{section.records.slice(0, 10).map((row) => <ReportRow key={row.id} label={`${row.label} · ${row.detail}`} value={row.amount == null ? row.status : formatTZS(row.amount)} />)}</ReportSection>)}</div>}
     </div>
   );
 }
