@@ -2083,31 +2083,56 @@ function CustomReportBuilder() {
   const exportPdf = () => {
     if (!preview) return;
     const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
-    let y = 48;
-    const line = (height = 18) => {
-      if (y > 780) {
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 40;
+    let y = 44;
+    const ensureSpace = (height: number) => {
+      if (y + height > pageHeight - 40) {
         pdf.addPage();
-        y = 48;
+        y = 44;
       }
-      const current = y;
-      y += height;
-      return current;
+    };
+    const addText = (value: string, x: number, width: number, size = 9, weight: 'normal' | 'bold' = 'normal') => {
+      pdf.setFont('helvetica', weight);
+      pdf.setFontSize(size);
+      const lines = pdf.splitTextToSize(value || '-', width) as string[];
+      ensureSpace(lines.length * (size + 4) + 4);
+      pdf.text(lines, x, y);
+      y += lines.length * (size + 4);
+    };
+    const addSectionHeading = (title: string) => {
+      ensureSpace(34);
+      pdf.setFillColor(240, 244, 248);
+      pdf.roundedRect(margin, y - 16, pageWidth - margin * 2, 26, 4, 4, 'F');
+      addText(title, margin + 10, pageWidth - margin * 2 - 20, 12, 'bold');
+      y += 8;
     };
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(18);
-    pdf.text('SpareBolt custom report', 40, line(24));
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(10);
-    pdf.text(`${startDate} to ${endDate}`, 40, line(18));
+    pdf.text('SpareBolt custom report', margin, y);
+    y += 20;
+    addText(`${startDate} to ${endDate}`, margin, pageWidth - margin * 2, 10);
+    y += 8;
     for (const section of preview.sections) {
-      y += 10;
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(13);
-      pdf.text(`${CUSTOM_TYPE_LABELS[section.type]} (${section.total})`, 40, line(20));
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
+      addSectionHeading(`${CUSTOM_TYPE_LABELS[section.type]}  |  ${section.total} records  |  ${formatTZS(section.amount)}`);
+      ensureSpace(22);
       for (const row of section.records) {
-        pdf.text(`${row.date.slice(0, 10)} | ${row.label} | ${row.status} | ${row.detail}`.slice(0, 115), 40, line(15));
+        const date = row.date.slice(0, 10);
+        const amountValue = row.amount == null ? '-' : formatTZS(row.amount);
+        const columns = `${date}    ${row.label}    ${row.status}    ${amountValue}`;
+        addText(columns, margin, pageWidth - margin * 2, 9, 'bold');
+        if (row.related) {
+          addText(`Customer: ${row.related.customer}`, margin + 12, pageWidth - margin * 2 - 12, 9);
+          addText(`Seller(s): ${row.related.sellers.join(', ') || 'None listed'}`, margin + 12, pageWidth - margin * 2 - 12, 9);
+          addText(`Driver: ${row.related.driver || 'Not assigned'}`, margin + 12, pageWidth - margin * 2 - 12, 9);
+        } else {
+          addText(`Details: ${row.detail}`, margin + 12, pageWidth - margin * 2 - 12, 9);
+        }
+        ensureSpace(8);
+        pdf.setDrawColor(220, 226, 232);
+        pdf.line(margin, y, pageWidth - margin, y);
+        y += 10;
       }
     }
     pdf.save(`sparebolt-custom-report-${startDate}.pdf`);
@@ -2116,10 +2141,18 @@ function CustomReportBuilder() {
   return (
     <div className="space-y-5">
       <div className="grid gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <div>
+          <p className="text-sm font-bold text-foreground">1. Choose report sections</p>
+          <p className="mt-1 text-xs text-muted-foreground">Select the kinds of records you want to appear together in one report.</p>
+        </div>
         <div className="flex flex-wrap gap-2">
           {(Object.keys(CUSTOM_TYPE_LABELS) as CustomReportType[]).map((type) => (
-            <button key={type} type="button" onClick={() => toggleType(type)} className={cn('rounded-lg border px-3 py-2 text-xs font-bold cursor-pointer', types.includes(type) ? 'border-bolt-500 bg-bolt-500/10 text-bolt-700 dark:text-bolt-300' : 'border-border text-muted-foreground hover:text-foreground')}>{CUSTOM_TYPE_LABELS[type]}</button>
+            <button key={type} type="button" aria-pressed={types.includes(type)} onClick={() => toggleType(type)} className={cn('rounded-lg border px-3 py-2 text-xs font-bold cursor-pointer', types.includes(type) ? 'border-bolt-500 bg-bolt-500/10 text-bolt-700 dark:text-bolt-300' : 'border-border text-muted-foreground hover:text-foreground')}>{types.includes(type) ? 'Selected: ' : ''}{CUSTOM_TYPE_LABELS[type]}</button>
           ))}
+        </div>
+        <div className="border-t border-border pt-3">
+          <p className="text-sm font-bold text-foreground">2. Set date and filters</p>
+          <p className="mt-1 text-xs text-muted-foreground">These filters apply to the active section below. Use Orders with “Not delivered” to find incomplete deliveries.</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <label className="text-xs font-bold text-muted-foreground">Start date<input type="date" value={startDate} onChange={(event) => { setStartDate(event.target.value); setPage(1); }} className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground" /></label>
@@ -2140,12 +2173,16 @@ function CustomReportBuilder() {
       </div>
 
       <div className="rounded-2xl border border-border bg-card shadow-sm">
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">{types.map((type) => <button key={type} type="button" onClick={() => { setActiveType(type); if (type !== 'payments') setMethod(''); setPage(1); }} className={cn('rounded-lg px-3 py-2 text-xs font-bold cursor-pointer', activeType === type ? 'bg-bolt-600 text-white' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>{CUSTOM_TYPE_LABELS[type]} ({selected[type]?.length ?? 0})</button>)}</div>
+        <div className="border-b border-border px-4 py-3">
+          <p className="text-sm font-bold text-foreground">3. Select records</p>
+          <p className="mt-1 text-xs text-muted-foreground">Switch between selected sections, tick individual records, then preview the final report.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">{types.map((type) => <button key={type} type="button" onClick={() => { setActiveType(type); if (type !== 'payments') setMethod(''); setPage(1); }} className={cn('rounded-lg px-3 py-2 text-xs font-bold cursor-pointer', activeType === type ? 'bg-bolt-600 text-white' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>{CUSTOM_TYPE_LABELS[type]} ({selected[type]?.length ?? 0} selected)</button>)}</div>
+        </div>
         <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b border-border bg-muted/70 text-[11px] font-bold uppercase tracking-wide text-muted-foreground"><tr><th className="w-12 px-4 py-3">Select</th><th className="px-4 py-3">Record</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Details</th><th className="px-4 py-3">Date</th></tr></thead><tbody className="divide-y divide-border">{records.map((row) => <tr key={row.id} className="hover:bg-muted/50"><td className="px-4 py-3"><input type="checkbox" checked={selectedForType.includes(row.id)} onChange={() => toggleRecord(row.id)} aria-label={`Select ${row.label}`} /></td><td className="px-4 py-3 font-semibold">{row.label}</td><td className="px-4 py-3">{row.status}</td><td className="px-4 py-3">{row.amount == null ? '—' : formatTZS(row.amount)}</td><td className="max-w-[20rem] truncate px-4 py-3 text-muted-foreground">{row.detail}</td><td className="px-4 py-3 text-xs text-muted-foreground">{formatRelative(row.date)}</td></tr>)}</tbody></table>{!loading && !records.length && <p className="py-10 text-center text-sm text-muted-foreground">No matching records</p>}</div>
         <PaginationControls page={page} totalPages={totalPages} totalItems={total} onPage={setPage} />
       </div>
 
-      {preview && <div className="space-y-4"><h3 className="font-display text-lg font-bold">Report preview</h3>{preview.sections.map((section) => <ReportSection key={section.type} title={`${CUSTOM_TYPE_LABELS[section.type]} · ${section.total} records`}><ReportRow label="Total amount" value={formatTZS(section.amount)} />{section.records.slice(0, 10).map((row) => <ReportRow key={row.id} label={`${row.label} · ${row.detail}`} value={row.amount == null ? row.status : formatTZS(row.amount)} />)}</ReportSection>)}</div>}
+      {preview && <div className="space-y-4"><div><h3 className="font-display text-lg font-bold">Report preview</h3><p className="mt-1 text-xs text-muted-foreground">This is the layout that will be used for PDF and CSV export.</p></div>{preview.sections.map((section) => <ReportSection key={section.type} title={`${CUSTOM_TYPE_LABELS[section.type]} · ${section.total} records`}><ReportRow label="Total amount" value={formatTZS(section.amount)} /><div className="mt-2 overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead className="border-b border-border text-[10px] font-bold uppercase text-muted-foreground"><tr><th className="px-2 py-2">Date</th><th className="px-2 py-2">Record</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Amount</th><th className="px-2 py-2">Details</th></tr></thead><tbody className="divide-y divide-border">{section.records.slice(0, 10).map((row) => <tr key={row.id} className="align-top"><td className="whitespace-nowrap px-2 py-2">{row.date.slice(0, 10)}</td><td className="px-2 py-2 font-semibold">{row.label}</td><td className="whitespace-nowrap px-2 py-2">{row.status}</td><td className="whitespace-nowrap px-2 py-2">{row.amount == null ? '-' : formatTZS(row.amount)}</td><td className="px-2 py-2 text-muted-foreground">{row.related ? <div className="space-y-1"><div><span className="font-semibold text-foreground">Customer:</span> {row.related.customer}</div><div><span className="font-semibold text-foreground">Seller(s):</span> {row.related.sellers.join(', ') || 'None listed'}</div><div><span className="font-semibold text-foreground">Driver:</span> {row.related.driver || 'Not assigned'}</div></div> : row.detail}</td></tr>)}</tbody></table></div></ReportSection>)}</div>}
     </div>
   );
 }
